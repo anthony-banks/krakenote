@@ -1,0 +1,49 @@
+# CLAUDE.md — Krakenote
+
+Guidance for Claude Code when working in this repository.
+
+## 🚨 Critical safety rule — database mutations
+
+**NEVER clear, delete, truncate, drop, or bulk-mutate any database — test OR production — unless the user has, in that same conversation, manually typed `CONFIRM` in all caps.**
+
+- This applies to every environment: the production Supabase project, the staging Supabase project, and any future database.
+- It covers `DELETE`, `TRUNCATE`, `DROP`, bulk `UPDATE`, and any REST/SQL call that removes or overwrites rows in bulk.
+- Reads (`SELECT`), single-row inserts for verification, and schema-additive migrations are fine without confirmation, but when in doubt, ask.
+- Do not accept "yes", "go ahead", or a thumbs-up as confirmation for a destructive DB action — require the literal token **`CONFIRM`**.
+- If a task seems to need a destructive DB action, explain what will be affected and wait for `CONFIRM`.
+
+## Project overview
+
+Krakenote is an AI-first study app — **iOS (SwiftUI)** + **companion web app**. Snap notes/PDFs → AI flashcards, quizzes, and a tutor; spaced-repetition review; synced across iOS and web. Full product spec: [`docs/PRD.md`](docs/PRD.md) (source of truth).
+
+## Repo layout
+
+| Path | What |
+|------|------|
+| `site/` | Marketing landing page + legal/support pages (static HTML) |
+| `server/` | Express server: serves `site/` + `POST /api/waitlist` → Supabase |
+| `supabase/schema.sql` | Waitlist table schema |
+| `docs/PRD.md` | Product requirements (source of truth) |
+
+## Infrastructure
+
+- **Hosting:** Railway, project `krakenote` (workspace: *anthony-banks's Projects*). Auto-deploys from GitHub.
+  - **production** env ← `main` branch → `krakenote-production.up.railway.app` + `www.krakenote.com`
+  - **staging** env → `krakenote-staging.up.railway.app`
+- **Database:** Supabase — **separate projects** for prod and staging (test data never touches prod).
+- **Secrets:** `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` live only as Railway env vars, never committed. The service/secret key bypasses RLS and must never reach the browser.
+- **Domain:** `krakenote.com` at GoDaddy → CNAME `www` → Railway; apex 301-forwards to `www`.
+
+## Dev commands
+
+```bash
+npm install        # install server deps
+npm start          # run server locally (serves site/ + /api/waitlist)
+```
+
+Local dev needs `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` in a `.env` (see `.env.example`); without them the site serves but the waitlist returns 503.
+
+## Workflow
+
+- Commit to `main` deploys **production**. Use the `staging` branch / staging env to test first once branch-based staging deploys are enabled.
+- Keep `docs/PRD.md` as the living product record — capture shaping ideas there.

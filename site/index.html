@@ -56,6 +56,9 @@
   .waitlist input:focus{border-color:var(--teal)}
   .note{font-size:13px;color:#8ea0b2;margin-top:12px}
   .ok{display:none;margin-top:14px;color:var(--teal);font-weight:600;font-family:var(--head)}
+  .err{display:none;margin-top:12px;color:var(--coral);font-weight:600;font-family:var(--head);font-size:14px}
+  .hp{position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;opacity:0}
+  .btn:disabled{opacity:.6;cursor:default;transform:none}
 
   /* HERO ART */
   .art{position:relative;display:flex;justify-content:center;align-items:center;min-height:340px}
@@ -181,10 +184,12 @@
       <h1>Snap your notes.<br/><span class="accent">Crack the exam.</span></h1>
       <p class="sub">Point your phone at any notes, textbook, slide, or PDF and get instant flashcards, quizzes, and an AI tutor — then a memory-science review loop drills you on exactly what you're about to forget.</p>
       <form class="waitlist" id="wl">
+        <input type="text" class="hp" name="company" tabindex="-1" autocomplete="off" aria-hidden="true" />
         <input type="email" id="email" placeholder="you@email.com" required aria-label="Email address" />
         <button class="btn btn-primary" type="submit">Get early access</button>
       </form>
       <div class="ok" id="ok">🐙 You're on the list! We'll email you when Krakenote launches.</div>
+      <div class="err" id="err"></div>
       <p class="note">Join the waitlist — be first in line when we launch. No spam, ever.</p>
     </div>
     <div class="art">
@@ -269,10 +274,12 @@
     <h2>Be first to release the Krakenote</h2>
     <p class="lead">We're launching soon on the App Store. Join the waitlist and we'll let you know the moment it's live — plus early-supporter perks.</p>
     <form class="waitlist" id="wl2" style="margin:0 auto">
+      <input type="text" class="hp" name="company" tabindex="-1" autocomplete="off" aria-hidden="true" />
       <input type="email" id="email2" placeholder="you@email.com" required aria-label="Email address" />
       <button class="btn btn-primary" type="submit">Get early access</button>
     </form>
     <div class="ok" id="ok2" style="text-align:center">🐙 You're on the list! We'll be in touch soon.</div>
+    <div class="err" id="err2" style="text-align:center"></div>
   </div>
 </section>
 
@@ -290,17 +297,32 @@
 </footer>
 
 <script>
-  function wire(formId, okId, emailId){
-    var f=document.getElementById(formId), ok=document.getElementById(okId), em=document.getElementById(emailId);
-    f.addEventListener('submit',function(e){
+  function wire(formId, okId, emailId, errId){
+    var f=document.getElementById(formId), ok=document.getElementById(okId),
+        em=document.getElementById(emailId), err=document.getElementById(errId),
+        btn=f.querySelector('button'), hp=f.querySelector('.hp');
+    f.addEventListener('submit', async function(e){
       e.preventDefault();
-      if(!em.value || em.value.indexOf('@')<0) return;
-      // In production: POST to /api/waitlist → Supabase table (or ConvertKit/Mailchimp).
-      f.style.display='none'; ok.style.display='block';
+      var email=(em.value||'').trim();
+      if(!email || email.indexOf('@')<0) return;
+      err.style.display='none'; btn.disabled=true;
+      try{
+        var res=await fetch('/api/waitlist',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({email:email, hp:hp?hp.value:'', source:formId})
+        });
+        var data=await res.json().catch(function(){return {};});
+        if(!res.ok || !data.ok) throw new Error(data.error||'Something went wrong. Please try again.');
+        f.style.display='none'; ok.style.display='block';
+      }catch(ex){
+        btn.disabled=false;
+        err.textContent=ex.message; err.style.display='block';
+      }
     });
   }
-  wire('wl','ok','email');
-  wire('wl2','ok2','email2');
+  wire('wl','ok','email','err');
+  wire('wl2','ok2','email2','err2');
 </script>
 </body>
 </html>

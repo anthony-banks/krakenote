@@ -89,6 +89,19 @@ Build for all ages; **market to college students and adult exam/cert learners (1
 
 **5.6 Companion web.** v1: auth (Sign in with Apple + email), billing, and full **read** access to decks/cards/quiz history/progress dashboards, plus document upload. It reads the same backend as iOS. v2: full study parity + web checkout.
 
+**5.7 Audio Study Mode (SHAPING — idea captured, not yet scoped to a version).** The passive, hands-free counterpart to flashcards: "walk with your notes." Where cards are active recall (lean-in, screen-on), this is ambient review (lean-back, screen-off) — it turns commuting, walking, and the gym into study time. Available on both **web and mobile**.
+
+- **Sources are not siloed.** Lectures, typed notes, scanned notes, and PDFs are all just *inputs*. The user chooses which ones to **consolidate** into a single study set, and can **summarize across the combined set** — e.g., merge a recorded lecture with the day's typed notes into one summary. It's the user's call to combine, never forced this-or-that.
+- **Two directions, both user-selectable (not either/or):**
+  - **Capture (audio → text):** record a lecture or voice memo → transcribe → summarize → optionally auto-generate cards.
+  - **Playback (text → audio):** take any notes/summary → generate a spoken **narration** the user listens to on the go.
+- **Voice / TTS:** prefer **ElevenLabs** for quality if the cost works; fall back to a cheaper neural TTS (e.g., OpenAI TTS) or Apple's on-device voice if not. Keep the provider swappable.
+- **Persistence — "indefinitely" means *access*, not *unlimited generation*.** Generation stays metered/Pro-gated, but **once a transcript or audio artifact is created, it lives on the user's account and stays accessible forever.** Transcripts (text) are cheap to keep for everyone; raw/large audio is the cost tail → compress (Opus), keep originals for Pro, and/or regenerate TTS on demand rather than storing.
+- **Opt-in sharing (future/community seed):** a user may *optionally* make one of their transcriptions/audio reviewable and accessible to **other users** — only ever with the original owner's explicit permission. This is the seed of the shared/community layer (see §4 v2 "shared/community decks"). Default is strictly private per-user.
+- **Playback surfaces:** iOS background audio + lock-screen + **CarPlay** controls; standard audio player on web. This is what makes true screen-off, walking-around review work.
+- **Monetization fit:** clean Pro feature — free tier gets a monthly minute cap on generation; **Pro = unlimited audio generation + indefinite storage.**
+- **Open questions to resolve when scoping:** ElevenLabs cost per active user at expected volume; storage policy for raw audio (keep vs. regenerate); on-device vs. server transcription for long lectures; sharing model + moderation before any community exposure.
+
 ## 6. System architecture
 
 The web companion needs to read the *same* user data as the app, so we do **not** use CloudKit (Apple-only). We use a cross-platform backend both clients share.

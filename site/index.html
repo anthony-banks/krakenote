@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Krakenote — Snap your notes. Crack the exam.</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --abyss:#0A1A2F; --deep:#12314F; --teal:#22C3B6; --violet:#7B61FF;
+    --coral:#FF6B5C; --parchment:#F7F4ED; --mist:#EEF3F6; --ink:#0B1220;
+    --slate:#5A6B7B; --fog:#D9E1E8;
+    --head:'Poppins',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    --body:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{font-family:var(--body);color:var(--parchment);background:var(--abyss);line-height:1.6;-webkit-font-smoothing:antialiased}
+  a{color:inherit;text-decoration:none}
+  .wrap{max-width:1140px;margin:0 auto;padding:0 24px}
+  .btn{display:inline-block;font-family:var(--head);font-weight:700;border:0;border-radius:14px;cursor:pointer;transition:transform .15s ease,box-shadow .15s ease;font-size:16px}
+  .btn-primary{background:var(--coral);color:var(--ink);padding:15px 26px;box-shadow:0 10px 30px rgba(255,107,92,.35)}
+  .btn-primary:hover{transform:translateY(-2px);box-shadow:0 16px 40px rgba(255,107,92,.45)}
+  .btn-ghost{background:transparent;color:var(--parchment);border:1.5px solid rgba(255,255,255,.22);padding:13px 22px}
+  .btn-ghost:hover{border-color:var(--teal);color:var(--teal)}
+
+  /* NAV */
+  nav{position:sticky;top:0;z-index:50;background:rgba(10,26,47,.72);backdrop-filter:blur(12px);border-bottom:1px solid rgba(255,255,255,.06)}
+  nav .wrap{display:flex;align-items:center;justify-content:space-between;height:70px}
+  .brand{display:flex;align-items:center;gap:10px;font-family:var(--head);font-weight:800;font-size:22px;letter-spacing:-.5px}
+  .brand svg{width:34px;height:34px}
+  .navlinks{display:flex;align-items:center;gap:30px;font-weight:500;font-size:15px;color:#c9d6e2}
+  .navlinks a:hover{color:var(--teal)}
+  .navlinks .btn{font-size:14px;padding:10px 18px}
+  @media(max-width:820px){.navlinks a:not(.btn){display:none}}
+
+  /* HERO */
+  .hero{position:relative;overflow:hidden;padding:70px 0 90px}
+  .glow{position:absolute;border-radius:50%;filter:blur(90px);opacity:.55;z-index:0}
+  .glow.a{width:520px;height:520px;background:var(--teal);top:-160px;right:-120px;opacity:.28}
+  .glow.b{width:460px;height:460px;background:var(--violet);bottom:-200px;left:-120px;opacity:.30}
+  .hero .wrap{position:relative;z-index:2;display:grid;grid-template-columns:1.05fr .95fr;gap:40px;align-items:center}
+  @media(max-width:900px){.hero .wrap{grid-template-columns:1fr;text-align:center}}
+  .pill{display:inline-block;font-family:var(--head);font-weight:600;font-size:13px;letter-spacing:.3px;color:var(--teal);background:rgba(34,195,182,.12);border:1px solid rgba(34,195,182,.3);padding:7px 14px;border-radius:999px;margin-bottom:22px}
+  h1{font-family:var(--head);font-weight:800;font-size:clamp(38px,5.4vw,60px);line-height:1.05;letter-spacing:-1.5px;margin-bottom:20px}
+  h1 .accent{background:linear-gradient(90deg,var(--teal),var(--violet));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .sub{font-size:19px;color:#c4d1de;max-width:520px;margin-bottom:30px}
+  @media(max-width:900px){.sub{margin-left:auto;margin-right:auto}}
+  .waitlist{display:flex;gap:10px;max-width:480px}
+  @media(max-width:900px){.waitlist{margin:0 auto}}
+  @media(max-width:480px){.waitlist{flex-direction:column}}
+  .waitlist input{flex:1;font-family:var(--body);font-size:16px;padding:15px 18px;border-radius:14px;border:1.5px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);color:#fff;outline:none}
+  .waitlist input::placeholder{color:#8ea0b2}
+  .waitlist input:focus{border-color:var(--teal)}
+  .note{font-size:13px;color:#8ea0b2;margin-top:12px}
+  .ok{display:none;margin-top:14px;color:var(--teal);font-weight:600;font-family:var(--head)}
+
+  /* HERO ART */
+  .art{position:relative;display:flex;justify-content:center;align-items:center;min-height:340px}
+  .phone{position:relative;width:230px;height:460px;background:linear-gradient(160deg,#0f2740,#0a1a2f);border:2px solid rgba(255,255,255,.1);border-radius:36px;box-shadow:0 30px 70px rgba(0,0,0,.45);padding:18px 14px;z-index:2}
+  .phone .notch{width:90px;height:20px;background:#0a1a2f;border-radius:0 0 14px 14px;margin:-18px auto 14px;border:2px solid rgba(255,255,255,.08);border-top:0}
+  .fcard{background:var(--parchment);color:var(--ink);border-radius:16px;padding:16px;margin-bottom:12px;box-shadow:0 6px 16px rgba(0,0,0,.25)}
+  .fcard .q{font-family:var(--head);font-weight:700;font-size:14px;margin-bottom:8px}
+  .fcard .a{font-size:12px;color:var(--slate)}
+  .chip{display:inline-block;font-family:var(--head);font-weight:600;font-size:11px;padding:5px 10px;border-radius:999px;margin:3px 4px 0 0}
+  .chip.correct{background:rgba(34,195,182,.18);color:#0c8f85;border:1px solid rgba(34,195,182,.4)}
+  .chip.plain{background:var(--mist);color:var(--slate)}
+  .kraken{position:absolute;right:-30px;bottom:-20px;width:150px;height:150px;z-index:3;filter:drop-shadow(0 12px 24px rgba(0,0,0,.4))}
+  @media(max-width:900px){.kraken{right:6%}}
+
+  /* SECTIONS */
+  section.block{padding:80px 0}
+  .eyebrow{font-family:var(--head);font-weight:600;color:var(--teal);letter-spacing:1px;text-transform:uppercase;font-size:13px;text-align:center;margin-bottom:12px}
+  h2{font-family:var(--head);font-weight:800;font-size:clamp(28px,3.4vw,40px);letter-spacing:-1px;text-align:center;margin-bottom:14px}
+  .lead{text-align:center;color:#b7c5d3;max-width:620px;margin:0 auto 50px;font-size:17px}
+
+  .steps{display:grid;grid-template-columns:repeat(4,1fr);gap:20px}
+  @media(max-width:820px){.steps{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:480px){.steps{grid-template-columns:1fr}}
+  .step{background:var(--deep);border:1px solid rgba(255,255,255,.06);border-radius:20px;padding:26px 22px;position:relative}
+  .step .num{font-family:var(--head);font-weight:800;font-size:14px;color:var(--abyss);background:var(--teal);width:30px;height:30px;border-radius:9px;display:flex;align-items:center;justify-content:center;margin-bottom:16px}
+  .step h3{font-family:var(--head);font-weight:700;font-size:19px;margin-bottom:8px}
+  .step p{color:#a9b8c6;font-size:15px}
+
+  .feat{background:var(--mist);color:var(--ink)}
+  .fgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
+  @media(max-width:820px){.fgrid{grid-template-columns:1fr}}
+  .fcell{background:#fff;border:1px solid var(--fog);border-radius:20px;padding:28px;box-shadow:0 8px 24px rgba(10,26,47,.05)}
+  .fcell .ic{width:46px;height:46px;border-radius:13px;display:flex;align-items:center;justify-content:center;margin-bottom:16px;background:linear-gradient(135deg,var(--teal),var(--violet))}
+  .fcell .ic svg{width:24px;height:24px;stroke:#fff;fill:none;stroke-width:2}
+  .fcell h3{font-family:var(--head);font-weight:700;font-size:19px;margin-bottom:8px;color:var(--ink)}
+  .fcell p{color:var(--slate);font-size:15px}
+  .feat .eyebrow{color:#0c8f85}
+  .feat h2,.feat .lead{color:var(--ink)}.feat .lead{color:var(--slate)}
+
+  /* AUDIENCE */
+  .aud{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin-top:8px}
+  .aud span{font-family:var(--head);font-weight:600;font-size:14px;padding:10px 18px;border-radius:999px;background:var(--deep);border:1px solid rgba(255,255,255,.08);color:#c9d6e2}
+
+  /* PRICING TEASER */
+  .price{background:linear-gradient(135deg,var(--deep),var(--abyss));border:1px solid rgba(255,255,255,.08);border-radius:26px;max-width:640px;margin:0 auto;padding:44px;text-align:center}
+  .price .big{font-family:var(--head);font-weight:800;font-size:40px;letter-spacing:-1px}
+  .price .big span{font-size:18px;color:var(--slate);font-weight:600}
+  .price ul{list-style:none;margin:22px 0 30px;display:inline-block;text-align:left}
+  .price li{padding:6px 0;color:#c4d1de}
+  .price li::before{content:"✦";color:var(--teal);margin-right:10px}
+
+  /* CTA */
+  .cta{text-align:center}
+  .cta h2{margin-bottom:18px}
+
+  footer{background:#071426;border-top:1px solid rgba(255,255,255,.06);padding:40px 0}
+  footer .wrap{display:flex;flex-wrap:wrap;gap:18px;align-items:center;justify-content:space-between}
+  .foot-links{display:flex;gap:26px;font-size:14px;color:#8ea0b2}
+  .foot-links a:hover{color:var(--teal)}
+  .copy{font-size:13px;color:#5f7288}
+</style>
+</head>
+<body>
+
+<!-- kraken mascot as a reusable symbol -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="kraken" viewBox="0 0 200 200">
+    <defs>
+      <linearGradient id="kg" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#2ad4c6"/><stop offset="1" stop-color="#1a9d94"/>
+      </linearGradient>
+    </defs>
+    <!-- tentacles -->
+    <g fill="url(#kg)">
+      <path d="M60 120 C40 140 34 168 46 182 C54 172 58 156 66 148 Z"/>
+      <path d="M78 130 C70 156 58 172 66 188 C78 176 84 156 90 142 Z"/>
+      <path d="M100 134 C98 160 96 178 108 188 C116 174 114 152 112 138 Z"/>
+      <path d="M122 130 C134 152 138 172 132 188 C120 176 114 156 110 142 Z"/>
+      <path d="M140 120 C160 140 166 166 154 182 C146 172 142 156 134 148 Z"/>
+    </g>
+    <!-- head -->
+    <path d="M100 26 C58 26 34 56 34 92 C34 122 56 140 100 140 C144 140 166 122 166 92 C166 56 142 26 100 26 Z" fill="url(#kg)"/>
+    <!-- glasses -->
+    <g stroke="#0A1A2F" stroke-width="5" fill="#F7F4ED">
+      <circle cx="78" cy="86" r="20"/>
+      <circle cx="124" cy="86" r="20"/>
+      <path d="M98 86 h6" fill="none"/>
+    </g>
+    <!-- pupils -->
+    <circle cx="80" cy="88" r="7" fill="#0A1A2F"/>
+    <circle cx="122" cy="88" r="7" fill="#0A1A2F"/>
+    <circle cx="83" cy="85" r="2.4" fill="#fff"/>
+    <circle cx="125" cy="85" r="2.4" fill="#fff"/>
+    <!-- smile -->
+    <path d="M86 112 Q100 124 114 112" stroke="#0A1A2F" stroke-width="4.5" fill="none" stroke-linecap="round"/>
+    <!-- pencil in tentacle -->
+    <g transform="rotate(38 158 150)">
+      <rect x="150" y="120" width="10" height="46" rx="2" fill="#FF6B5C"/>
+      <polygon points="150,120 160,120 155,108" fill="#F7F4ED"/>
+      <polygon points="153,112 157,112 155,108" fill="#0A1A2F"/>
+      <rect x="150" y="160" width="10" height="7" fill="#F4B740"/>
+    </g>
+  </symbol>
+</svg>
+
+<nav>
+  <div class="wrap">
+    <div class="brand"><svg><use href="#kraken"/></svg>Krakenote</div>
+    <div class="navlinks">
+      <a href="#how">How it works</a>
+      <a href="#features">Features</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#waitlist" class="btn btn-primary">Join waitlist</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="glow a"></div><div class="glow b"></div>
+  <div class="wrap">
+    <div>
+      <span class="pill">iOS &amp; Web · AI-powered</span>
+      <h1>Snap your notes.<br/><span class="accent">Crack the exam.</span></h1>
+      <p class="sub">Point your phone at any notes, textbook, slide, or PDF and get instant flashcards, quizzes, and an AI tutor — then a memory-science review loop drills you on exactly what you're about to forget.</p>
+      <form class="waitlist" id="wl">
+        <input type="email" id="email" placeholder="you@email.com" required aria-label="Email address" />
+        <button class="btn btn-primary" type="submit">Get early access</button>
+      </form>
+      <div class="ok" id="ok">🐙 You're on the list! We'll email you when Krakenote launches.</div>
+      <p class="note">Join the waitlist — be first in line when we launch. No spam, ever.</p>
+    </div>
+    <div class="art">
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="fcard">
+          <div class="q">What produces most of the cell's ATP?</div>
+          <span class="chip plain">Nucleus</span>
+          <span class="chip correct">Mitochondrion ✓</span>
+          <span class="chip plain">Ribosome</span>
+        </div>
+        <div class="fcard">
+          <div class="q">Q: Define "osmosis"</div>
+          <div class="a">Tap to flip → diffusion of water across a semi-permeable membrane.</div>
+        </div>
+        <div class="fcard" style="margin-bottom:0">
+          <div class="q">Review streak 🔥 6 days</div>
+          <div class="a">12 cards due today · 94% recall</div>
+        </div>
+      </div>
+      <svg class="kraken"><use href="#kraken"/></svg>
+    </div>
+  </div>
+</header>
+
+<section class="block" id="how">
+  <div class="wrap">
+    <div class="eyebrow">How it works</div>
+    <h2>From messy notes to mastery</h2>
+    <p class="lead">One clean loop, backed by the science of memory — capture anything, understand it, and actually retain it.</p>
+    <div class="steps">
+      <div class="step"><div class="num">1</div><h3>Capture</h3><p>Snap a photo, or upload a PDF or doc. On-device OCR reads it in seconds.</p></div>
+      <div class="step"><div class="num">2</div><h3>Understand</h3><p>AI builds flashcards and quizzes — and the Tutor shows the work and makes fresh practice.</p></div>
+      <div class="step"><div class="num">3</div><h3>Retain</h3><p>Spaced repetition resurfaces each card right before you'd forget it. Streaks keep you going.</p></div>
+      <div class="step"><div class="num">4</div><h3>Prove</h3><p>Take quizzes and mock exams, and watch your readiness score climb toward test day.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="block feat" id="features">
+  <div class="wrap">
+    <div class="eyebrow">Features</div>
+    <h2>Everything a study app should be</h2>
+    <p class="lead">Most apps do one piece. Krakenote does the whole spine — on your phone and the web.</p>
+    <div class="fgrid">
+      <div class="fcell"><div class="ic"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 7l2 12h12l2-12M9 7V5a3 3 0 016 0v2"/></svg></div><h3>Instant flashcards</h3><p>Turn any page into a clean, editable deck — no typing, no busywork.</p></div>
+      <div class="fcell"><div class="ic"><svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></div><h3>Smart quizzes</h3><p>Auto-generated multiple-choice with explanations, so you learn the why.</p></div>
+      <div class="fcell"><div class="ic"><svg viewBox="0 0 24 24"><path d="M12 3l8 4v6c0 5-3.5 7.5-8 8-4.5-.5-8-3-8-8V7z"/></svg></div><h3>AI Tutor mode</h3><p>Show the work, generate more practice, or submit your own answer for feedback.</p></div>
+      <div class="fcell"><div class="ic"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 019-9 9 9 0 019 9M3 12a9 9 0 009 9 9 9 0 009-9M12 3v18"/></svg></div><h3>Spaced repetition</h3><p>A proven memory algorithm shows you the right card at the right moment.</p></div>
+      <div class="fcell"><div class="ic"><svg viewBox="0 0 24 24"><path d="M4 4h16v12H4zM2 20h20M9 8l2 2 4-4"/></svg></div><h3>iOS + web sync</h3><p>Study on your phone, review everything on the web. One account, always in sync.</p></div>
+      <div class="fcell"><div class="ic"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8zM14 2v6h6M9 15h6"/></svg></div><h3>Docs &amp; PDFs</h3><p>Upload lecture slides, textbooks, and PDFs from your phone or the web.</p></div>
+    </div>
+    <div class="aud">
+      <span>College students</span><span>Nursing / NCLEX</span><span>Cert exams (AWS, PMP)</span><span>Real estate &amp; bar</span><span>Language learners</span>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="pricing">
+  <div class="wrap">
+    <div class="eyebrow">Pricing</div>
+    <h2>Free to start. Pro when you're serious.</h2>
+    <p class="lead">Make decks and review for free. Go Pro for unlimited AI, the Tutor, and exam mode.</p>
+    <div class="price">
+      <div class="big">$4.99<span> /mo</span></div>
+      <div style="color:var(--slate);margin-top:4px">or $29.99/yr · 7-day free trial</div>
+      <ul>
+        <li>Unlimited AI flashcards &amp; quizzes</li>
+        <li>AI Tutor: show-the-work, practice &amp; critique</li>
+        <li>Exam mode with readiness score</li>
+        <li>Cloud &amp; document uploads</li>
+        <li>Full sync across iOS &amp; web</li>
+      </ul>
+      <div><a href="#waitlist" class="btn btn-primary">Join the waitlist</a></div>
+    </div>
+  </div>
+</section>
+
+<section class="block cta" id="waitlist">
+  <div class="wrap">
+    <div class="eyebrow">Early access</div>
+    <h2>Be first to release the Krakenote</h2>
+    <p class="lead">We're launching soon on the App Store. Join the waitlist and we'll let you know the moment it's live — plus early-supporter perks.</p>
+    <form class="waitlist" id="wl2" style="margin:0 auto">
+      <input type="email" id="email2" placeholder="you@email.com" required aria-label="Email address" />
+      <button class="btn btn-primary" type="submit">Get early access</button>
+    </form>
+    <div class="ok" id="ok2" style="text-align:center">🐙 You're on the list! We'll be in touch soon.</div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="brand" style="font-size:19px"><svg style="width:28px;height:28px"><use href="#kraken"/></svg>Krakenote</div>
+    <div class="foot-links">
+      <a href="#">Privacy Policy</a>
+      <a href="#">Terms</a>
+      <a href="#">Support</a>
+      <a href="#waitlist">Waitlist</a>
+    </div>
+    <div class="copy">© 2026 Krakenote. All rights reserved.</div>
+  </div>
+</footer>
+
+<script>
+  function wire(formId, okId, emailId){
+    var f=document.getElementById(formId), ok=document.getElementById(okId), em=document.getElementById(emailId);
+    f.addEventListener('submit',function(e){
+      e.preventDefault();
+      if(!em.value || em.value.indexOf('@')<0) return;
+      // In production: POST to /api/waitlist → Supabase table (or ConvertKit/Mailchimp).
+      f.style.display='none'; ok.style.display='block';
+    });
+  }
+  wire('wl','ok','email');
+  wire('wl2','ok2','email2');
+</script>
+</body>
+</html>

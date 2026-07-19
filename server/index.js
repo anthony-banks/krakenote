@@ -53,6 +53,19 @@ app.get('/healthz', (_req, res) => {
   res.json({ ok: true, supabase: Boolean(supabase) });
 });
 
+// Apex -> www, preserving path and query. Registered after /healthz so Railway's
+// healthcheck can never be redirected, and matched against the exact apex host so
+// *.up.railway.app and localhost are left alone. GET/HEAD only: a 301 on a POST
+// can drop the request body.
+const APEX_HOST = 'krakenote.com';
+app.use((req, res, next) => {
+  const host = (req.headers.host || '').split(':')[0].toLowerCase();
+  if (host === APEX_HOST && (req.method === 'GET' || req.method === 'HEAD')) {
+    return res.redirect(301, `https://www.${APEX_HOST}${req.originalUrl}`);
+  }
+  return next();
+});
+
 app.post('/api/waitlist', async (req, res) => {
   const ip = (req.headers['x-forwarded-for'] || req.ip || '').toString().split(',')[0].trim();
   if (rateLimited('wl:' + ip)) {

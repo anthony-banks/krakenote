@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Krakenote — Waitlist Admin</title>
+<meta name="robots" content="noindex, nofollow" />
+<meta name="theme-color" content="#26364f" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<!-- set theme before paint to avoid a flash -->
+<script>(function(){try{var r=document.documentElement,s=localStorage.getItem('theme'),
+sys=matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';
+r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --head:'Poppins',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    --body:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    --bg:#26364f; --surface:#2f4267; --surface-2:#3a5079;
+    --text:#eef0f6; --muted:#a9b6ca; --border:rgba(233,231,241,.13);
+    --accent:#7fb2ff; --accent2:#8a7dff; --cta:#6c63ff; --cta-text:#ffffff;
+    --cta-shadow:rgba(108,99,255,.38); --glow1:#6c63ff; --glow2:#7fb2ff;
+    --nav-bg:rgba(38,54,79,.72); --footer-bg:#1e2c44; --danger:#ff8674;
+    --mark:url(/mark-dark.svg);
+  }
+  :root[data-theme="light"]{
+    --bg:#f4f5fb; --surface:#ffffff; --surface-2:#eef0f8;
+    --text:#161826; --muted:#5b6678; --border:rgba(20,22,45,.10);
+    --accent:#4f5bd5; --accent2:#6c63ff; --cta:#5b52e6; --cta-text:#ffffff;
+    --cta-shadow:rgba(91,82,230,.26); --glow1:#8a7dff; --glow2:#7fb2ff;
+    --nav-bg:rgba(244,245,251,.82); --footer-bg:#e8eaf4; --danger:#d94a38;
+    --mark:url(/mark-light.svg);
+  }
+  @media (prefers-color-scheme: light){
+    :root:not([data-theme="dark"]){
+      --bg:#f4f5fb; --surface:#ffffff; --surface-2:#eef0f8;
+      --text:#161826; --muted:#5b6678; --border:rgba(20,22,45,.10);
+      --accent:#4f5bd5; --accent2:#6c63ff; --cta:#5b52e6; --cta-text:#ffffff;
+      --cta-shadow:rgba(91,82,230,.26); --glow1:#8a7dff; --glow2:#7fb2ff;
+      --nav-bg:rgba(244,245,251,.82); --footer-bg:#e8eaf4; --danger:#d94a38;
+      --mark:url(/mark-light.svg);
+    }
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--body);color:var(--text);background:var(--bg);line-height:1.6;-webkit-font-smoothing:antialiased}
+  .mark{display:inline-block;background:var(--mark) center/contain no-repeat}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 24px}
+  .btn{display:inline-flex;align-items:center;gap:8px;font-family:var(--head);font-weight:700;border:0;border-radius:14px;cursor:pointer;transition:transform .15s ease,box-shadow .15s ease;font-size:15px}
+  .btn-primary{background:var(--cta);color:var(--cta-text);padding:12px 22px;box-shadow:0 10px 30px var(--cta-shadow)}
+  .btn-primary:hover{transform:translateY(-2px);box-shadow:0 16px 42px var(--cta-shadow)}
+  .btn:disabled{opacity:.6;cursor:default;transform:none}
+
+  nav{position:sticky;top:0;z-index:50;background:var(--nav-bg);backdrop-filter:blur(12px);border-bottom:1px solid var(--border)}
+  nav .wrap{display:flex;align-items:center;justify-content:space-between;height:70px}
+  .brand{display:flex;align-items:center;gap:10px;font-family:var(--head);font-weight:800;font-size:22px;letter-spacing:-.5px;color:var(--text)}
+  .brand .mark{width:47px;height:35px}
+  .brand small{font-family:var(--body);font-weight:500;font-size:13px;color:var(--muted);letter-spacing:0}
+
+  main{padding:44px 0 80px}
+  .head-row{display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between;margin-bottom:28px}
+  .head-row h1{font-family:var(--head);font-weight:800;font-size:clamp(26px,3.4vw,36px);letter-spacing:-1px}
+
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:18px;margin-bottom:30px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:26px 24px}
+  .card .label{font-family:var(--head);font-weight:600;text-transform:uppercase;letter-spacing:1px;font-size:12px;color:var(--accent);margin-bottom:10px}
+  .card .big{font-family:var(--head);font-weight:800;font-size:44px;line-height:1;letter-spacing:-1px}
+  .card .hint{font-size:13px;color:var(--muted);margin-top:8px}
+
+  .panel{background:var(--surface);border:1px solid var(--border);border-radius:20px;overflow:hidden}
+  .panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 22px;border-bottom:1px solid var(--border)}
+  .panel-head h2{font-family:var(--head);font-weight:700;font-size:18px}
+  .table-scroll{overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{text-align:left;padding:13px 22px;border-bottom:1px solid var(--border);white-space:nowrap}
+  th{font-family:var(--head);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);background:var(--surface-2)}
+  tbody tr:last-child td{border-bottom:0}
+  tbody tr:hover td{background:color-mix(in srgb,var(--accent) 8%,transparent)}
+  td.email{font-weight:600}
+  .tag{display:inline-block;font-family:var(--head);font-weight:600;font-size:12px;padding:3px 10px;border-radius:999px;background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 30%,transparent)}
+
+  .state{padding:54px 24px;text-align:center;color:var(--muted)}
+  .state .emoji{font-size:40px;display:block;margin-bottom:14px}
+  .state h3{font-family:var(--head);font-weight:700;font-size:20px;color:var(--text);margin-bottom:8px}
+  .state p{max-width:440px;margin:0 auto;font-size:15px}
+
+  /* Login card */
+  .login{max-width:400px;margin:60px auto;background:var(--surface);border:1px solid var(--border);border-radius:22px;padding:34px}
+  .login h2{font-family:var(--head);font-weight:800;font-size:24px;letter-spacing:-.5px;margin-bottom:6px}
+  .login p{color:var(--muted);font-size:14px;margin-bottom:22px}
+  .login label{display:block;font-family:var(--head);font-weight:600;font-size:13px;margin-bottom:8px}
+  .login input{width:100%;font-family:var(--body);font-size:16px;padding:14px 16px;border-radius:14px;border:1.5px solid var(--border);background:var(--surface-2);color:var(--text);outline:none;margin-bottom:16px}
+  .login input:focus{border-color:var(--accent)}
+  .login .btn-primary{width:100%;justify-content:center}
+  .login .err{display:none;color:var(--danger);font-weight:600;font-family:var(--head);font-size:14px;margin-bottom:14px}
+
+  .hidden{display:none!important}
+  .muted-note{font-size:13px;color:var(--muted);margin-top:18px}
+  .foot-actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  .linkbtn{background:transparent;color:var(--muted);border:1px solid var(--border);padding:11px 18px;border-radius:14px;font-family:var(--head);font-weight:600;font-size:14px;cursor:pointer}
+  .linkbtn:hover{color:var(--accent);border-color:var(--accent)}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="/"><i class="mark"></i>Krakenote <small>Admin</small></a>
+    <div style="display:flex;align-items:center;gap:14px">
+      <span id="whoami" class="hidden" style="color:var(--muted);font-size:14px"></span>
+      <button id="signout" class="linkbtn hidden" type="button">Sign out</button>
+    </div>
+  </div>
+</nav>
+
+<!-- Login -->
+<section id="loginView" class="hidden">
+  <div class="login">
+    <h2>Waitlist Admin</h2>
+    <p>Sign in with your admin account.</p>
+    <form id="loginForm">
+      <div class="err" id="loginErr"></div>
+      <label for="em">Email</label>
+      <input type="email" id="em" autocomplete="username" placeholder="you@email.com" required />
+      <label for="pw">Password</label>
+      <input type="password" id="pw" autocomplete="current-password" placeholder="••••••••" required />
+      <button class="btn btn-primary" type="submit" id="loginBtn">Sign in</button>
+    </form>
+    <p class="muted-note">Read-only dashboard. Superuser access only. Your password is verified on the server — no keys are ever stored in the browser.</p>
+  </div>
+</section>
+
+<!-- Dashboard -->
+<main id="dashView" class="hidden">
+  <div class="wrap">
+    <div class="head-row">
+      <h1>Waitlist</h1>
+      <div class="foot-actions">
+        <button id="refreshBtn" class="linkbtn" type="button">↻ Refresh</button>
+        <button id="csvBtn" class="btn btn-primary" type="button">Download CSV</button>
+      </div>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <div class="label">Total signups</div>
+        <div class="big" id="statCount">—</div>
+        <div class="hint" id="statHint">across all sources</div>
+      </div>
+      <div class="card">
+        <div class="label">Showing</div>
+        <div class="big" id="statShown">—</div>
+        <div class="hint">most recent (max 500)</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Recent signups</h2>
+      </div>
+      <div id="tableState" class="state">
+        <span class="emoji">🐙</span>
+        <h3>Loading…</h3>
+        <p>Fetching waitlist signups.</p>
+      </div>
+      <div id="tableWrap" class="table-scroll hidden">
+        <table>
+          <thead>
+            <tr><th>Email</th><th>Source</th><th>Signed up</th></tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+  var TOKEN_KEY = 'kn_admin_token';
+  var $ = function(id){ return document.getElementById(id); };
+
+  function getToken(){ try { return sessionStorage.getItem(TOKEN_KEY) || ''; } catch(e){ return ''; } }
+  function setToken(t){ try { sessionStorage.setItem(TOKEN_KEY, t); } catch(e){} }
+  function clearToken(){ try { sessionStorage.removeItem(TOKEN_KEY); } catch(e){} }
+
+  function authHeaders(){
+    var t = getToken();
+    return t ? { 'Authorization': 'Bearer ' + t } : {};
+  }
+
+  function showLogin(msg){
+    $('loginView').classList.remove('hidden');
+    $('dashView').classList.add('hidden');
+    $('signout').classList.add('hidden');
+    $('whoami').classList.add('hidden');
+    var e = $('loginErr');
+    if (msg){ e.textContent = msg; e.style.display = 'block'; } else { e.style.display = 'none'; }
+    $('em').focus();
+  }
+
+  function showDash(){
+    $('loginView').classList.add('hidden');
+    $('dashView').classList.remove('hidden');
+    $('signout').classList.remove('hidden');
+    var nm = ''; try { nm = sessionStorage.getItem('kn_admin_name') || ''; } catch(e){}
+    var who = $('whoami');
+    if (nm){ who.textContent = 'Signed in as ' + nm; who.classList.remove('hidden'); }
+    else { who.classList.add('hidden'); }
+  }
+
+  function setState(emoji, title, body){
+    $('tableWrap').classList.add('hidden');
+    var s = $('tableState');
+    s.classList.remove('hidden');
+    s.innerHTML = '<span class="emoji">' + emoji + '</span><h3></h3><p></p>';
+    s.querySelector('h3').textContent = title;
+    s.querySelector('p').textContent = body;
+  }
+
+  function fmtDate(iso){
+    if(!iso) return '';
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    return d.toLocaleString(undefined, { year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
+  }
+
+  function render(data){
+    var rows = data.rows || [];
+    $('statCount').textContent = (data.count != null ? data.count : rows.length).toLocaleString();
+    $('statShown').textContent = rows.length.toLocaleString();
+
+    if (rows.length === 0){
+      setState('📭', 'No signups yet', 'When people join the waitlist they will show up here.');
+      return;
+    }
+
+    var tb = $('rows');
+    tb.innerHTML = '';
+    rows.forEach(function(r){
+      var tr = document.createElement('tr');
+      var email = document.createElement('td'); email.className = 'email'; email.textContent = r.email || '';
+      var src = document.createElement('td');
+      var tag = document.createElement('span'); tag.className = 'tag'; tag.textContent = r.source || '—'; src.appendChild(tag);
+      var when = document.createElement('td'); when.textContent = fmtDate(r.created_at);
+      tr.appendChild(email); tr.appendChild(src); tr.appendChild(when);
+      tb.appendChild(tr);
+    });
+    $('tableState').classList.add('hidden');
+    $('tableWrap').classList.remove('hidden');
+  }
+
+  async function loadData(){
+    if (!getToken()){ showLogin(); return; }
+    showDash();
+    setState('🐙', 'Loading…', 'Fetching waitlist signups.');
+    try {
+      var res = await fetch('/api/admin/waitlist', { headers: authHeaders(), cache: 'no-store' });
+      if (res.status === 401){ clearToken(); showLogin('Your session expired. Please sign in again.'); return; }
+      if (res.status === 503){
+        var d503 = await res.json().catch(function(){ return {}; });
+        setState('🛠️', 'Not configured yet', d503.error || 'The waitlist database is not configured on this server.');
+        return;
+      }
+      if (!res.ok){ setState('⚠️', 'Something went wrong', 'Could not load the waitlist (HTTP ' + res.status + ').'); return; }
+      var data = await res.json();
+      render(data);
+    } catch (ex){
+      setState('⚠️', 'Network error', 'Could not reach the server. Check your connection and retry.');
+    }
+  }
+
+  async function downloadCsv(){
+    var btn = $('csvBtn');
+    btn.disabled = true;
+    try {
+      var res = await fetch('/api/admin/waitlist.csv', { headers: authHeaders(), cache: 'no-store' });
+      if (res.status === 401){ clearToken(); showLogin('Session expired. Sign in again.'); return; }
+      if (!res.ok){ alert('CSV export failed (HTTP ' + res.status + ').'); return; }
+      var blob = await res.blob();
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url; a.download = 'krakenote-waitlist.csv';
+      document.body.appendChild(a); a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (ex){
+      alert('CSV export failed. Please try again.');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  // Wire up
+  $('loginForm').addEventListener('submit', async function(e){
+    e.preventDefault();
+    var email = ($('em').value || '').trim();
+    var pw = $('pw').value || '';
+    if (!email || !pw) return;
+    var btn = $('loginBtn'), err = $('loginErr');
+    err.style.display = 'none'; btn.disabled = true;
+    try {
+      var res = await fetch('/api/admin/login', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email, password: pw })
+      });
+      var data = await res.json().catch(function(){ return {}; });
+      if (!res.ok || !data.ok || !data.token) throw new Error(data.error || 'Sign in failed.');
+      setToken(data.token);
+      try { sessionStorage.setItem('kn_admin_name', data.name || ''); } catch(e){}
+      $('pw').value = '';
+      loadData();
+    } catch (ex) {
+      btn.disabled = false;
+      err.textContent = ex.message; err.style.display = 'block';
+    }
+  });
+  $('signout').addEventListener('click', function(){ clearToken(); try{ sessionStorage.removeItem('kn_admin_name'); }catch(e){} showLogin(); });
+  $('refreshBtn').addEventListener('click', loadData);
+  $('csvBtn').addEventListener('click', downloadCsv);
+
+  // Boot
+  loadData();
+</script>
+</body>
+</html>

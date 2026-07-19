@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Krakenote — Your study dashboard</title>
+<meta name="robots" content="noindex, nofollow" />
+<meta name="theme-color" content="#26364f" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<!-- set theme before paint to avoid a flash -->
+<script>(function(){try{var r=document.documentElement,s=localStorage.getItem('theme'),
+sys=matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';
+r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --head:'Poppins',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    --body:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    --bg:#26364f; --surface:#2f4267; --surface-2:#3a5079;
+    --text:#eef0f6; --muted:#a9b6ca; --border:rgba(233,231,241,.13);
+    --accent:#7fb2ff; --accent2:#8a7dff; --cta:#6c63ff; --cta-text:#ffffff;
+    --cta-shadow:rgba(108,99,255,.38); --danger:#ff8674;
+    --nav-bg:rgba(38,54,79,.72); --mark:url(/mark-dark.svg);
+  }
+  :root[data-theme="light"]{
+    --bg:#f4f5fb; --surface:#ffffff; --surface-2:#eef0f8;
+    --text:#161826; --muted:#5b6678; --border:rgba(20,22,45,.10);
+    --accent:#4f5bd5; --accent2:#6c63ff; --cta:#5b52e6; --cta-text:#ffffff;
+    --cta-shadow:rgba(91,82,230,.26); --danger:#d94a38;
+    --nav-bg:rgba(244,245,251,.82); --mark:url(/mark-light.svg);
+  }
+  @media (prefers-color-scheme: light){
+    :root:not([data-theme="dark"]){
+      --bg:#f4f5fb; --surface:#ffffff; --surface-2:#eef0f8;
+      --text:#161826; --muted:#5b6678; --border:rgba(20,22,45,.10);
+      --accent:#4f5bd5; --accent2:#6c63ff; --cta:#5b52e6; --cta-text:#ffffff;
+      --cta-shadow:rgba(91,82,230,.26); --danger:#d94a38;
+      --nav-bg:rgba(244,245,251,.82); --mark:url(/mark-light.svg);
+    }
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--body);color:var(--text);background:var(--bg);line-height:1.6;-webkit-font-smoothing:antialiased}
+  .mark{display:inline-block;background:var(--mark) center/contain no-repeat}
+  .hidden{display:none!important}
+
+  /* Brand icons are a fixed navy in source, so mask them and paint with
+     currentColor — they then follow light/dark and active states for free. */
+  .ic{display:inline-block;width:20px;height:20px;background:currentColor;flex:none;
+      -webkit-mask:var(--i) center/contain no-repeat;mask:var(--i) center/contain no-repeat}
+
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;font-family:var(--head);font-weight:700;border:0;border-radius:14px;cursor:pointer;transition:transform .15s ease,box-shadow .15s ease;font-size:15px}
+  .btn-primary{background:var(--cta);color:var(--cta-text);padding:12px 22px;box-shadow:0 10px 30px var(--cta-shadow)}
+  .btn-primary:hover{transform:translateY(-2px);box-shadow:0 16px 42px var(--cta-shadow)}
+  .btn:disabled{opacity:.6;cursor:default;transform:none}
+  .linkbtn{display:inline-flex;align-items:center;gap:8px;background:transparent;color:var(--muted);border:1px solid var(--border);padding:10px 16px;border-radius:14px;font-family:var(--head);font-weight:600;font-size:14px;cursor:pointer}
+  .linkbtn:hover{color:var(--accent);border-color:var(--accent)}
+
+  nav{position:sticky;top:0;z-index:50;background:var(--nav-bg);backdrop-filter:blur(12px);border-bottom:1px solid var(--border)}
+  nav .bar{display:flex;align-items:center;justify-content:space-between;height:70px;padding:0 24px;gap:14px}
+  .brand{display:flex;align-items:center;gap:10px;font-family:var(--head);font-weight:800;font-size:22px;letter-spacing:-.5px;color:var(--text);text-decoration:none}
+  .brand .mark{width:47px;height:35px}
+  .navright{display:flex;align-items:center;gap:12px}
+  #whoami{color:var(--muted);font-size:14px;max-width:34vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .theme-toggle{background:transparent;border:1px solid var(--border);color:var(--muted);width:40px;height:40px;border-radius:12px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
+  .theme-toggle:hover{color:var(--accent);border-color:var(--accent)}
+  .menu-btn{display:none}
+
+  /* ── Auth ── */
+  .auth{max-width:420px;margin:56px auto;padding:0 24px}
+  .auth-card{background:var(--surface);border:1px solid var(--border);border-radius:22px;padding:34px}
+  .auth h1{font-family:var(--head);font-weight:800;font-size:25px;letter-spacing:-.5px;margin-bottom:6px}
+  .auth .sub{color:var(--muted);font-size:14px;margin-bottom:22px}
+  .auth label{display:block;font-family:var(--head);font-weight:600;font-size:13px;margin-bottom:8px}
+  .auth input{width:100%;font-family:var(--body);font-size:16px;padding:14px 16px;border-radius:14px;border:1.5px solid var(--border);background:var(--surface-2);color:var(--text);outline:none;margin-bottom:16px}
+  .auth input:focus{border-color:var(--accent)}
+  .auth .btn-primary{width:100%}
+  .msg{display:none;font-family:var(--head);font-weight:600;font-size:14px;margin-bottom:14px;padding:11px 14px;border-radius:12px;line-height:1.45}
+  .msg.err{display:block;color:var(--danger);background:color-mix(in srgb,var(--danger) 12%,transparent);border:1px solid color-mix(in srgb,var(--danger) 30%,transparent)}
+  .msg.ok{display:block;color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);border:1px solid color-mix(in srgb,var(--accent) 30%,transparent)}
+  .msg a{color:inherit}
+  .switch{text-align:center;font-size:14px;color:var(--muted);margin-top:20px}
+  .switch button{background:none;border:0;color:var(--accent);font-family:var(--head);font-weight:600;font-size:14px;cursor:pointer;padding:0}
+  .switch button:hover{text-decoration:underline}
+  .fineprint{font-size:12.5px;color:var(--muted);margin-top:18px;text-align:center;line-height:1.5}
+
+  /* ── App shell ── */
+  .shell{display:grid;grid-template-columns:236px 1fr;min-height:calc(100vh - 70px)}
+  aside{border-right:1px solid var(--border);padding:22px 14px;display:flex;flex-direction:column;gap:6px}
+  .navlink{display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:13px;font-family:var(--head);font-weight:600;font-size:14.5px;color:var(--muted);background:none;border:0;width:100%;text-align:left;cursor:pointer;transition:background .12s ease,color .12s ease}
+  .navlink:hover{color:var(--text);background:var(--surface)}
+  .navlink.active{color:var(--cta-text);background:var(--cta);box-shadow:0 8px 22px var(--cta-shadow)}
+  :root[data-theme="light"] .navlink.active{color:#fff}
+  .aside-sep{flex:1}
+  .signout-side{color:var(--muted)}
+  .signout-side:hover{color:var(--danger);background:color-mix(in srgb,var(--danger) 10%,transparent)}
+
+  main{padding:34px 30px 70px;min-width:0}
+  .head-row{margin-bottom:26px}
+  .head-row h1{font-family:var(--head);font-weight:800;font-size:clamp(24px,3.2vw,33px);letter-spacing:-1px}
+  .head-row p{color:var(--muted);font-size:15px;margin-top:6px}
+
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:16px;margin-bottom:26px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:22px}
+  .card .label{display:flex;align-items:center;gap:8px;font-family:var(--head);font-weight:600;text-transform:uppercase;letter-spacing:1px;font-size:11.5px;color:var(--accent);margin-bottom:10px}
+  .card .big{font-family:var(--head);font-weight:800;font-size:40px;line-height:1;letter-spacing:-1px}
+  .card .hint{font-size:13px;color:var(--muted);margin-top:7px}
+
+  .panel{background:var(--surface);border:1px solid var(--border);border-radius:20px;overflow:hidden}
+  .panel-head{display:flex;align-items:center;gap:10px;padding:17px 22px;border-bottom:1px solid var(--border)}
+  .panel-head h2{font-family:var(--head);font-weight:700;font-size:17px}
+  .state{padding:56px 26px;text-align:center;color:var(--muted)}
+  .state .emoji{font-size:38px;display:block;margin-bottom:14px}
+  .state h3{font-family:var(--head);font-weight:700;font-size:19px;color:var(--text);margin-bottom:8px}
+  .state p{max-width:430px;margin:0 auto;font-size:14.5px}
+
+  .boot{padding:70px 24px;text-align:center;color:var(--muted)}
+
+  @media(max-width:820px){
+    .shell{grid-template-columns:1fr}
+    aside{position:fixed;top:70px;left:0;bottom:0;width:236px;background:var(--bg);z-index:40;transform:translateX(-100%);transition:transform .2s ease}
+    aside.open{transform:translateX(0)}
+    .menu-btn{display:inline-flex}
+    main{padding:26px 20px 60px}
+    #whoami{display:none}
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="bar">
+    <div style="display:flex;align-items:center;gap:10px">
+      <button class="theme-toggle menu-btn" id="menuBtn" type="button" aria-label="Toggle navigation" aria-expanded="false">
+        <i class="ic" style="--i:url(/icons/list.svg)"></i>
+      </button>
+      <a class="brand" href="/"><i class="mark"></i>Krakenote</a>
+    </div>
+    <div class="navright">
+      <span id="whoami"></span>
+      <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle dark mode">
+        <i class="ic" style="--i:url(/icons/wave.svg)"></i>
+      </button>
+      <button id="signoutTop" class="linkbtn hidden" type="button">
+        <i class="ic" style="width:16px;height:16px;--i:url(/icons/x.svg)"></i>Sign out
+      </button>
+    </div>
+  </div>
+</nav>
+
+<!-- Booting: we don't know yet whether there's a session. -->
+<div id="bootView" class="boot">
+  <span style="font-size:34px;display:block;margin-bottom:12px">🐙</span>
+  Loading your dashboard…
+</div>
+
+<!-- ── Auth ── -->
+<section id="authView" class="auth hidden">
+  <div class="auth-card">
+    <h1 id="authTitle">Welcome back</h1>
+    <p class="sub" id="authSub">Sign in to your Krakenote account.</p>
+
+    <div class="msg" id="authMsg"></div>
+
+    <form id="authForm" novalidate>
+      <label for="em">Email</label>
+      <input type="email" id="em" autocomplete="username" placeholder="you@email.com" required />
+      <label for="pw">Password</label>
+      <input type="password" id="pw" autocomplete="current-password" placeholder="••••••••" required />
+      <button class="btn btn-primary" type="submit" id="authBtn">Sign in</button>
+    </form>
+
+    <div class="switch">
+      <span id="switchText">New here?</span>
+      <button type="button" id="switchBtn">Create an account</button>
+    </div>
+    <p class="fineprint" id="fineprint">
+      Accounts are limited to people on the waitlist while we're in early access.
+    </p>
+  </div>
+</section>
+
+<!-- ── Dashboard shell ── -->
+<div id="appView" class="shell hidden">
+  <aside id="sidebar">
+    <button class="navlink active" data-view="home"><i class="ic" style="--i:url(/icons/home.svg)"></i>Home</button>
+    <button class="navlink" data-view="decks"><i class="ic" style="--i:url(/icons/list.svg)"></i>Decks</button>
+    <button class="navlink" data-view="review"><i class="ic" style="--i:url(/icons/restartTime.svg)"></i>Review</button>
+    <button class="navlink" data-view="quizzes"><i class="ic" style="--i:url(/icons/question.svg)"></i>Quizzes</button>
+    <button class="navlink" data-view="progress"><i class="ic" style="--i:url(/icons/progressBar.svg)"></i>Progress</button>
+    <button class="navlink" data-view="upload"><i class="ic" style="--i:url(/icons/upload.svg)"></i>Upload</button>
+    <button class="navlink" data-view="account"><i class="ic" style="--i:url(/icons/profile.svg)"></i>Account</button>
+    <div class="aside-sep"></div>
+    <button class="navlink signout-side" id="signoutSide"><i class="ic" style="--i:url(/icons/x.svg)"></i>Sign out</button>
+  </aside>
+
+  <main>
+    <div class="head-row">
+      <h1 id="viewTitle">Home</h1>
+      <p id="viewSub">Your study overview.</p>
+    </div>
+
+    <div class="cards" id="statCards">
+      <div class="card">
+        <div class="label"><i class="ic" style="width:14px;height:14px;--i:url(/icons/list.svg)"></i>Decks</div>
+        <div class="big">0</div>
+        <div class="hint">No decks yet</div>
+      </div>
+      <div class="card">
+        <div class="label"><i class="ic" style="width:14px;height:14px;--i:url(/icons/stopwatch.svg)"></i>Due today</div>
+        <div class="big">0</div>
+        <div class="hint">Nothing to review</div>
+      </div>
+      <div class="card">
+        <div class="label"><i class="ic" style="width:14px;height:14px;--i:url(/icons/flame.svg)"></i>Day streak</div>
+        <div class="big">0</div>
+        <div class="hint">Starts with your first review</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <i class="ic" id="panelIcon" style="--i:url(/icons/paper.svg)"></i>
+        <h2 id="panelTitle">Recent activity</h2>
+      </div>
+      <div class="state">
+        <span class="emoji" id="stateEmoji">🐙</span>
+        <h3 id="stateTitle">Nothing here yet</h3>
+        <p id="stateBody">Your decks and study history will appear here.</p>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="/vendor/supabase.js"></script>
+<script>
+(function(){
+  var $ = function(id){ return document.getElementById(id); };
+  var sb = null;          // supabase client, once configured
+  var mode = 'signin';    // 'signin' | 'signup'
+
+  // ── Theme ──
+  $('themeToggle').addEventListener('click', function(){
+    var r = document.documentElement;
+    var nextTheme = r.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    r.setAttribute('data-theme', nextTheme);
+    try { localStorage.setItem('theme', nextTheme); } catch(e){}
+  });
+  $('menuBtn').addEventListener('click', function(){
+    var open = $('sidebar').classList.toggle('open');
+    this.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+
+  // ── Views ──
+  function show(which){
+    ['bootView','authView','appView'].forEach(function(v){
+      $(v).classList.toggle('hidden', v !== which);
+    });
+    $('signoutTop').classList.toggle('hidden', which !== 'appView');
+  }
+
+  function setMsg(kind, html){
+    var m = $('authMsg');
+    m.className = 'msg' + (kind ? ' ' + kind : '');
+    m.innerHTML = html || '';
+    if (!kind) m.style.display = 'none';
+  }
+
+  function setMode(next){
+    mode = next;
+    var signup = mode === 'signup';
+    $('authTitle').textContent = signup ? 'Create your account' : 'Welcome back';
+    $('authSub').textContent = signup
+      ? 'Early access is open to people on the waitlist.'
+      : 'Sign in to your Krakenote account.';
+    $('authBtn').textContent = signup ? 'Create account' : 'Sign in';
+    $('switchText').textContent = signup ? 'Already have an account?' : 'New here?';
+    $('switchBtn').textContent = signup ? 'Sign in' : 'Create an account';
+    $('pw').setAttribute('autocomplete', signup ? 'new-password' : 'current-password');
+    $('fineprint').textContent = signup
+      ? 'You will need to be on the waitlist to register.'
+      : 'Accounts are limited to people on the waitlist while we are in early access.';
+    setMsg(null, '');
+  }
+
+  $('switchBtn').addEventListener('click', function(){
+    setMode(mode === 'signup' ? 'signin' : 'signup');
+  });
+
+  // ── Dashboard section copy. Everything is an honest empty state: there is no
+  // deck/card data anywhere yet, so there is nothing to fetch or fake. ──
+  var VIEWS = {
+    home:     { title:'Home',     sub:'Your study overview.',                    icon:'paper',       panel:'Recent activity', emoji:'🐙', h:'Nothing here yet',        b:'Once you start capturing notes, your recent decks and reviews will show up here.' },
+    decks:    { title:'Decks',    sub:'Every deck you have created.',            icon:'list',        panel:'Your decks',      emoji:'📚', h:'No decks yet',            b:'Decks you create in the Krakenote iOS app will sync here automatically.' },
+    review:   { title:'Review',   sub:'Spaced repetition, scheduled for you.',   icon:'restartTime', panel:'Due today',       emoji:'✅', h:'Nothing due',             b:'When you have cards, Krakenote surfaces each one right before you would forget it.' },
+    quizzes:  { title:'Quizzes',  sub:'Test yourself and track scores.',         icon:'question',    panel:'Quiz history',    emoji:'📝', h:'No quizzes taken',        b:'Quiz attempts and scores will be listed here once you take your first one.' },
+    progress: { title:'Progress', sub:'Retention and streaks over time.',        icon:'progressBar', panel:'Your progress',   emoji:'📈', h:'No data yet',             b:'Progress charts appear after your first few review sessions.' },
+    upload:   { title:'Upload',   sub:'Turn documents into study material.',     icon:'upload',      panel:'Upload',          emoji:'📄', h:'Uploads are coming soon', b:'Drag-and-drop PDF and document upload is planned for the v1 web companion.' },
+    account:  { title:'Account',  sub:'Your profile and subscription.',          icon:'profile',     panel:'Account',         emoji:'⚙️', h:'Nothing to manage yet',   b:'Subscription and profile settings arrive alongside the paid plan.' }
+  };
+
+  function renderView(key){
+    var v = VIEWS[key] || VIEWS.home;
+    $('viewTitle').textContent = v.title;
+    $('viewSub').textContent = v.sub;
+    $('panelTitle').textContent = v.panel;
+    $('panelIcon').style.setProperty('--i', 'url(/icons/' + v.icon + '.svg)');
+    $('stateEmoji').textContent = v.emoji;
+    $('stateTitle').textContent = v.h;
+    $('stateBody').textContent = v.b;
+    // Stat tiles are an overview concept — only meaningful on Home.
+    $('statCards').classList.toggle('hidden', key !== 'home');
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll('.navlink[data-view]'), function(btn){
+    btn.addEventListener('click', function(){
+      Array.prototype.forEach.call(document.querySelectorAll('.navlink[data-view]'), function(b){
+        b.classList.remove('active');
+      });
+      btn.classList.add('active');
+      renderView(btn.getAttribute('data-view'));
+      $('sidebar').classList.remove('open');
+    });
+  });
+
+  // ── Auth flow ──
+  function greet(user){
+    var email = (user && user.email) || '';
+    $('whoami').textContent = email ? 'Signed in as ' + email : '';
+  }
+
+  async function onSignedIn(session){
+    greet(session.user);
+    renderView('home');
+    show('appView');
+  }
+
+  async function signOut(){
+    try { if (sb) await sb.auth.signOut(); } catch(e){}
+    setMode('signin');
+    $('pw').value = '';
+    show('authView');
+    setMsg('ok', 'You have been signed out.');
+  }
+  $('signoutTop').addEventListener('click', signOut);
+  $('signoutSide').addEventListener('click', signOut);
+
+  $('authForm').addEventListener('submit', async function(e){
+    e.preventDefault();
+    if (!sb) return;
+    var email = ($('em').value || '').trim().toLowerCase();
+    var pw = $('pw').value || '';
+    if (!email || !pw){ setMsg('err', 'Email and password are both required.'); return; }
+
+    var btn = $('authBtn');
+    btn.disabled = true;
+    setMsg(null, '');
+
+    try {
+      if (mode === 'signup'){
+        // Server-side because the waitlist gate must not be skippable.
+        var res = await fetch('/api/auth/signup', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ email: email, password: pw })
+        });
+        var data = await res.json().catch(function(){ return {}; });
+        if (!res.ok || !data.ok){
+          if (data.error === 'not_on_waitlist'){
+            setMsg('err', 'That email is not on the waitlist yet. <a href="/#waitlist">Join the waitlist</a> and we will open your account.');
+          } else {
+            setMsg('err', data.error || 'Could not create your account.');
+          }
+          btn.disabled = false;
+          return;
+        }
+        // Account exists now — sign straight in so there is no second step.
+      }
+
+      var out = await sb.auth.signInWithPassword({ email: email, password: pw });
+      if (out.error || !out.data || !out.data.session){
+        setMsg('err', mode === 'signup'
+          ? 'Your account was created, but sign-in failed. Try signing in.'
+          : 'Invalid email or password.');
+        if (mode === 'signup') setMode('signin');
+        btn.disabled = false;
+        return;
+      }
+      $('pw').value = '';
+      btn.disabled = false;
+      onSignedIn(out.data.session);
+    } catch (ex){
+      btn.disabled = false;
+      setMsg('err', 'Could not reach the server. Check your connection and try again.');
+    }
+  });
+
+  // ── Boot ──
+  (async function boot(){
+    var cfg;
+    try {
+      var r = await fetch('/api/config', { cache:'no-store' });
+      cfg = await r.json().catch(function(){ return {}; });
+      if (!r.ok || !cfg.ok) throw new Error(cfg.error || 'not configured');
+    } catch (ex){
+      show('authView');
+      $('authForm').classList.add('hidden');
+      document.querySelector('.switch').classList.add('hidden');
+      $('authTitle').textContent = 'Accounts are not set up yet';
+      $('authSub').textContent = '';
+      setMsg('err', 'This server has no Supabase credentials configured, so sign-in is unavailable. If you are running locally, set SUPABASE_URL and SUPABASE_ANON_KEY.');
+      return;
+    }
+
+    sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey, {
+      auth: { persistSession: true, autoRefreshToken: true }
+    });
+
+    var sess = await sb.auth.getSession();
+    if (sess.data && sess.data.session){
+      onSignedIn(sess.data.session);
+    } else {
+      setMode('signin');
+      show('authView');
+    }
+
+    // Keep the UI in step with token refresh / sign-out in another tab.
+    sb.auth.onAuthStateChange(function(event, session){
+      if (event === 'SIGNED_OUT' || !session){
+        if (!$('authView').classList.contains('hidden')) return;
+        show('authView');
+      }
+    });
+  })();
+})();
+</script>
+</body>
+</html>

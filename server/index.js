@@ -2,7 +2,6 @@ import express from 'express';
 import { createClient } from '@supabase/supabase-js';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { timingSafeEqual } from 'node:crypto';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SITE_DIR = join(__dirname, '..', 'site');
@@ -10,9 +9,16 @@ const SITE_DIR = join(__dirname, '..', 'site');
 const PORT = process.env.PORT || 3000;
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-// Password for the read-only admin dashboard. Server-side only; never sent to
-// the browser. If unset, all protected admin routes respond 503.
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+
+// Emails allowed to access the admin dashboard (comma-separated). Server-side only.
+const SUPERUSER_EMAILS = new Set(
+  (process.env.SUPERUSER_EMAILS || '')
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean),
+);
+const isSuperuser = (email) =>
+  typeof email === 'string' && SUPERUSER_EMAILS.has(email.toLowerCase());
 
 // The service-role key bypasses RLS and must NEVER reach the browser.
 // It only lives here, server-side, injected via Railway env vars.
@@ -26,19 +32,19 @@ const supabase =
 const app = express();
 app.use(express.json({ limit: '8kb' }));
 
-// Basic in-memory rate limit: max 5 signups per IP per minute.
-const hits = new Map();
-function rateLimited(ip) {
+// Basic in-memory rate limit: max 5 requests per IP per minute (per bucket).
+const buckets = new Map();
+function rateLimited(key, max = 5) {
   const now = Date.now();
   const windowMs = 60_000;
-  const rec = hits.get(ip) || { count: 0, start: now };
+  const rec = buckets.get(key) || { count: 0, start: now };
   if (now - rec.start > windowMs) {
     rec.count = 0;
     rec.start = now;
   }
   rec.count += 1;
-  hits.set(ip, rec);
-  return rec.count > 5;
+  buckets.set(key, rec);
+  return rec.count > max;
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -49,7 +55,7 @@ app.get('/healthz', (_req, res) => {
 
 app.post('/api/waitlist', async (req, res) => {
   const ip = (req.headers['x-forwarded-for'] || req.ip || '').toString().split(',')[0].trim();
-  if (rateLimited(ip)) {
+  if (rateLimited('wl:' + ip)) {
     return res.status(429).json({ ok: false, error: 'Too many requests. Try again shortly.' });
   }
 
@@ -80,61 +86,65 @@ app.post('/api/waitlist', async (req, res) => {
   return res.json({ ok: true });
 });
 
-// ── Admin dashboard (READ-ONLY) ────────────────────────────────────────────
-// View-only access to waitlist signups. Every DB call below is a SELECT — no
-// insert/update/delete/truncate is ever performed here.
+// ── Admin dashboard (Supabase Auth, superuser-gated, READ-ONLY) ─────────────
+// Login is proxied through the server so Supabase keys never touch the browser.
+// Only emails in SUPERUSER_EMAILS may sign in or read admin data. Every DB call
+// below is a SELECT — no insert/update/delete/truncate is ever performed here.
 
-// Constant-time string compare that never throws on length mismatch.
-function safeEqual(a, b) {
-  const ab = Buffer.from(String(a), 'utf8');
-  const bb = Buffer.from(String(b), 'utf8');
-  if (ab.length !== bb.length) return false;
-  return timingSafeEqual(ab, bb);
-}
+// POST /api/admin/login { email, password } -> { token, name }
+// Verifies the password via Supabase Auth, gated on the superuser allowlist.
+app.post('/api/admin/login', async (req, res) => {
+  const ip = (req.headers['x-forwarded-for'] || req.ip || '').toString().split(',')[0].trim();
+  if (rateLimited('login:' + ip)) {
+    return res.status(429).json({ ok: false, error: 'Too many attempts. Try again in a minute.' });
+  }
+  if (!supabase) {
+    return res.status(503).json({ ok: false, error: 'Admin is not configured (database unavailable).' });
+  }
+  const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+  const password = typeof req.body?.password === 'string' ? req.body.password : '';
+  if (!email || !password) {
+    return res.status(400).json({ ok: false, error: 'Email and password are required.' });
+  }
+  // Gate on the allowlist first — don't attempt auth for non-superusers.
+  if (!isSuperuser(email)) {
+    return res.status(403).json({ ok: false, error: 'This account is not authorized for admin access.' });
+  }
+  // Fresh client per login so concurrent sign-ins never share session state.
+  const authClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const { data, error } = await authClient.auth.signInWithPassword({ email, password });
+  if (error || !data?.session) {
+    return res.status(401).json({ ok: false, error: 'Invalid email or password.' });
+  }
+  const name = data.user?.user_metadata?.name || data.user?.email || 'Admin';
+  return res.json({ ok: true, token: data.session.access_token, name });
+});
 
-// HTTP Basic Auth gate. Any username is accepted; only the password must match
-// ADMIN_PASSWORD. Missing creds -> 401 (browser prompts). Creds present but
-// ADMIN_PASSWORD unset -> 503 (not configured).
-function requireAdmin(req, res, next) {
+// Bearer-token middleware: validates the Supabase JWT + superuser allowlist.
+async function requireSuperuser(req, res, next) {
+  if (!supabase) {
+    return res.status(503).json({ ok: false, error: 'Admin database is not configured.' });
+  }
   const header = (req.headers.authorization || '').toString();
-  const [scheme, encoded] = header.split(' ');
-
-  if (scheme !== 'Basic' || !encoded) {
-    res.set('WWW-Authenticate', 'Basic realm="Krakenote Admin", charset="UTF-8"');
+  const token = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
+  if (!token) {
     return res.status(401).json({ ok: false, error: 'Authentication required.' });
   }
-
-  if (!ADMIN_PASSWORD) {
-    return res
-      .status(503)
-      .json({ ok: false, error: 'Admin dashboard is not configured (ADMIN_PASSWORD is unset).' });
+  const { data, error } = await supabase.auth.getUser(token);
+  if (error || !data?.user || !isSuperuser(data.user.email)) {
+    return res.status(401).json({ ok: false, error: 'Session invalid or expired. Please sign in again.' });
   }
-
-  let decoded = '';
-  try {
-    decoded = Buffer.from(encoded, 'base64').toString('utf8');
-  } catch {
-    decoded = '';
-  }
-  const sep = decoded.indexOf(':');
-  const password = sep >= 0 ? decoded.slice(sep + 1) : '';
-
-  if (!safeEqual(password, ADMIN_PASSWORD)) {
-    res.set('WWW-Authenticate', 'Basic realm="Krakenote Admin", charset="UTF-8"');
-    return res.status(401).json({ ok: false, error: 'Invalid credentials.' });
-  }
-
+  req.adminUser = data.user;
   return next();
 }
 
-// Serve the admin page (public HTML; the data it loads is what's protected).
+// Serve the admin page (public HTML; the login + data are what's protected).
 app.get('/admin', (_req, res) => res.sendFile(join(SITE_DIR, 'admin.html')));
 
 // Protected JSON: total count + newest-first rows (limit 500). SELECT only.
-app.get('/api/admin/waitlist', requireAdmin, async (_req, res) => {
-  if (!supabase) {
-    return res.status(503).json({ ok: false, error: 'Waitlist database is not configured.' });
-  }
+app.get('/api/admin/waitlist', requireSuperuser, async (_req, res) => {
   const { data, error, count } = await supabase
     .from('waitlist')
     .select('email, source, created_at', { count: 'exact' })
@@ -157,10 +167,7 @@ function csvCell(value) {
 }
 
 // Protected CSV download. SELECT only.
-app.get('/api/admin/waitlist.csv', requireAdmin, async (_req, res) => {
-  if (!supabase) {
-    return res.status(503).type('text/plain').send('Waitlist database is not configured.');
-  }
+app.get('/api/admin/waitlist.csv', requireSuperuser, async (_req, res) => {
   const { data, error } = await supabase
     .from('waitlist')
     .select('email, source, created_at')

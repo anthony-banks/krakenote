@@ -107,7 +107,10 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
 <nav>
   <div class="wrap">
     <a class="brand" href="/"><i class="mark"></i>Krakenote <small>Admin</small></a>
-    <button id="signout" class="linkbtn hidden" type="button">Sign out</button>
+    <div style="display:flex;align-items:center;gap:14px">
+      <span id="whoami" class="hidden" style="color:var(--muted);font-size:14px"></span>
+      <button id="signout" class="linkbtn hidden" type="button">Sign out</button>
+    </div>
   </div>
 </nav>
 
@@ -115,14 +118,16 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
 <section id="loginView" class="hidden">
   <div class="login">
     <h2>Waitlist Admin</h2>
-    <p>Enter the admin password to view waitlist signups.</p>
+    <p>Sign in with your admin account.</p>
     <form id="loginForm">
       <div class="err" id="loginErr"></div>
+      <label for="em">Email</label>
+      <input type="email" id="em" autocomplete="username" placeholder="you@email.com" required />
       <label for="pw">Password</label>
       <input type="password" id="pw" autocomplete="current-password" placeholder="••••••••" required />
       <button class="btn btn-primary" type="submit" id="loginBtn">Sign in</button>
     </form>
-    <p class="muted-note">Read-only dashboard. This page never stores or displays any database keys.</p>
+    <p class="muted-note">Read-only dashboard. Superuser access only. Your password is verified on the server — no keys are ever stored in the browser.</p>
   </div>
 </section>
 
@@ -181,22 +186,27 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
 
   function authHeaders(){
     var t = getToken();
-    return t ? { 'Authorization': 'Basic ' + t } : {};
+    return t ? { 'Authorization': 'Bearer ' + t } : {};
   }
 
   function showLogin(msg){
     $('loginView').classList.remove('hidden');
     $('dashView').classList.add('hidden');
     $('signout').classList.add('hidden');
+    $('whoami').classList.add('hidden');
     var e = $('loginErr');
     if (msg){ e.textContent = msg; e.style.display = 'block'; } else { e.style.display = 'none'; }
-    $('pw').focus();
+    $('em').focus();
   }
 
   function showDash(){
     $('loginView').classList.add('hidden');
     $('dashView').classList.remove('hidden');
     $('signout').classList.remove('hidden');
+    var nm = ''; try { nm = sessionStorage.getItem('kn_admin_name') || ''; } catch(e){}
+    var who = $('whoami');
+    if (nm){ who.textContent = 'Signed in as ' + nm; who.classList.remove('hidden'); }
+    else { who.classList.add('hidden'); }
   }
 
   function setState(emoji, title, body){
@@ -246,7 +256,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     setState('🐙', 'Loading…', 'Fetching waitlist signups.');
     try {
       var res = await fetch('/api/admin/waitlist', { headers: authHeaders(), cache: 'no-store' });
-      if (res.status === 401){ clearToken(); showLogin('That password was not accepted. Try again.'); return; }
+      if (res.status === 401){ clearToken(); showLogin('Your session expired. Please sign in again.'); return; }
       if (res.status === 503){
         var d503 = await res.json().catch(function(){ return {}; });
         setState('🛠️', 'Not configured yet', d503.error || 'The waitlist database is not configured on this server.');
@@ -282,16 +292,30 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   }
 
   // Wire up
-  $('loginForm').addEventListener('submit', function(e){
+  $('loginForm').addEventListener('submit', async function(e){
     e.preventDefault();
+    var email = ($('em').value || '').trim();
     var pw = $('pw').value || '';
-    if (!pw) return;
-    // Username is ignored by the server; only the password must match.
-    setToken(btoa('admin:' + pw));
-    $('pw').value = '';
-    loadData();
+    if (!email || !pw) return;
+    var btn = $('loginBtn'), err = $('loginErr');
+    err.style.display = 'none'; btn.disabled = true;
+    try {
+      var res = await fetch('/api/admin/login', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email, password: pw })
+      });
+      var data = await res.json().catch(function(){ return {}; });
+      if (!res.ok || !data.ok || !data.token) throw new Error(data.error || 'Sign in failed.');
+      setToken(data.token);
+      try { sessionStorage.setItem('kn_admin_name', data.name || ''); } catch(e){}
+      $('pw').value = '';
+      loadData();
+    } catch (ex) {
+      btn.disabled = false;
+      err.textContent = ex.message; err.style.display = 'block';
+    }
   });
-  $('signout').addEventListener('click', function(){ clearToken(); showLogin(); });
+  $('signout').addEventListener('click', function(){ clearToken(); try{ sessionStorage.removeItem('kn_admin_name'); }catch(e){} showLogin(); });
   $('refreshBtn').addEventListener('click', loadData);
   $('csvBtn').addEventListener('click', downloadCsv);
 

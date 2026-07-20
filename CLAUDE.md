@@ -45,5 +45,28 @@ Local dev needs `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` in a `.env` (see `.
 
 ## Workflow
 
-- Commit to `main` deploys **production**. Use the `staging` branch / staging env to test first once branch-based staging deploys are enabled.
 - Keep `docs/PRD.md` as the living product record — capture shaping ideas there.
+
+## Deploying — the only supported way
+
+Both environments deploy from a branch. **This is the whole procedure — do not use
+`railway up`, `railway redeploy`, or one-off uploads. They create detached builds
+that the next branch push or variable change silently wipes.**
+
+| To deploy… | Do this |
+|---|---|
+| **staging** | `git push origin staging` (merge your branch into `staging` first) |
+| **production** | merge to `main` (PR); the push to `main` deploys prod |
+
+That's it — deploying is a git push, nothing more. To preview a feature branch on
+staging: `git switch staging && git merge <branch> && git push origin staging`.
+
+**One-time setup this depends on:** the Railway *staging* service must have its
+deploy source set to the **`staging` branch** (Railway → krakenote → staging env →
+service → Settings → Source). If staging suddenly serves `main`'s code, that setting
+was reset — fix it there, don't reach for `railway up`.
+
+Setting a Railway env var triggers a redeploy **of the connected branch** — so set
+vars first, then push, and the var is present for the build. Env vars are never in
+git; they live only as Railway service variables per environment (prod and staging
+have separate Supabase projects, so use each one's own keys).

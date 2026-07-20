@@ -1,5 +1,6 @@
 import express from 'express';
 import { createClient } from '@supabase/supabase-js';
+import Anthropic from '@anthropic-ai/sdk';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -33,7 +34,17 @@ const supabase =
       })
     : null;
 
+// AI generation. Key is server-side only. Model is env-overridable so cost can
+// be tuned (e.g. ANTHROPIC_MODEL=claude-haiku-4-5) without a code change.
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+const AI_MODEL = process.env.ANTHROPIC_MODEL || 'claude-opus-4-8';
+const anthropic = ANTHROPIC_API_KEY ? new Anthropic({ apiKey: ANTHROPIC_API_KEY }) : null;
+
 const app = express();
+// Deck routes carry base64 uploads (PDFs), so they need a larger body limit;
+// everything else stays tiny. The first matching parser wins — express.json
+// skips a body it has already parsed, so the 8kb global never re-runs here.
+app.use('/api/decks', express.json({ limit: '12mb' }));
 app.use(express.json({ limit: '8kb' }));
 
 // Basic in-memory rate limit: max 5 requests per IP per minute (per bucket).
@@ -262,6 +273,180 @@ app.delete('/api/decks/:id', requireUser, async (req, res) => {
     return res.status(500).json({ ok: false, error: 'Could not delete the deck.' });
   }
   return res.json({ ok: true });
+});
+
+// ── AI generation: material → summary + flashcards ──────────────────────────
+// Strict JSON out, validated by the model against this schema (structured
+// outputs). hint is required so the schema is strict; the model sends "" when
+// there is no hint.
+const CARD_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    summary: { type: 'string' },
+    cards: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          front: { type: 'string' },
+          back: { type: 'string' },
+          hint: { type: 'string' },
+        },
+        required: ['front', 'back', 'hint'],
+      },
+    },
+  },
+  required: ['summary', 'cards'],
+};
+
+const GEN_SYSTEM =
+  "You are Krakenote's study-material generator. From the provided material, write a concise summary " +
+  '(2-4 sentences) and a set of high-quality spaced-repetition flashcards. Each card is an atomic ' +
+  'question (front) with a correct, self-contained answer (back), plus a short hint (empty string if ' +
+  'none). Produce 5-20 cards depending on the depth of the material. Never invent facts the material ' +
+  'does not support.';
+
+// POST /api/decks/:id/generate  { text? , file?: {name, mediaType, dataBase64} }
+app.post('/api/decks/:id/generate', requireUser, async (req, res) => {
+  if (!anthropic) {
+    return res.status(503).json({ ok: false, error: 'AI generation is not configured on this server yet.' });
+  }
+  const deckId = req.params.id;
+
+  // Confirm the deck is the caller's before spending an AI call on it.
+  const { data: deck, error: deckErr } = await req.db.from('decks').select('id').eq('id', deckId).maybeSingle();
+  if (deckErr || !deck) return res.status(404).json({ ok: false, error: 'Deck not found.' });
+
+  const file = req.body?.file;
+  const text = typeof req.body?.text === 'string' ? req.body.text : '';
+
+  let userContent;
+  let sourceKind;
+  let filename = null;
+  let extractedText = null;
+  let charCount = 0;
+
+  if (file && file.dataBase64 && file.mediaType === 'application/pdf') {
+    // PDFs go straight to the model as a document block — no server-side parsing.
+    userContent = [
+      { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: file.dataBase64 } },
+      { type: 'text', text: 'Generate study flashcards and a summary from this document.' },
+    ];
+    sourceKind = 'pdf';
+    filename = typeof file.name === 'string' ? file.name.slice(0, 200) : 'document.pdf';
+  } else {
+    const clean = (text || '').slice(0, 60000).trim(); // bound cost/latency
+    if (!clean) return res.status(400).json({ ok: false, error: 'Provide some notes or a PDF to generate from.' });
+    userContent = [{ type: 'text', text: 'Study material:\n\n' + clean }];
+    sourceKind = file ? 'file' : 'text';
+    filename = file && typeof file.name === 'string' ? file.name.slice(0, 200) : null;
+    extractedText = clean;
+    charCount = clean.length;
+  }
+
+  let result;
+  try {
+    const msg = await anthropic.messages.create({
+      model: AI_MODEL,
+      max_tokens: 16000,
+      system: GEN_SYSTEM,
+      output_config: { format: { type: 'json_schema', schema: CARD_SCHEMA }, effort: 'low' },
+      messages: [{ role: 'user', content: userContent }],
+    });
+    if (msg.stop_reason === 'refusal') {
+      return res.status(422).json({ ok: false, error: 'The AI declined to generate from this material.' });
+    }
+    const block = (msg.content || []).find((b) => b.type === 'text');
+    result = JSON.parse(block?.text || '{}');
+  } catch (ex) {
+    console.error('[generate] AI call failed:', ex?.message);
+    return res.status(502).json({ ok: false, error: 'AI generation failed. Please try again.' });
+  }
+
+  const summary = typeof result.summary === 'string' ? result.summary : '';
+  const cards = (Array.isArray(result.cards) ? result.cards : [])
+    .slice(0, 40)
+    .map((c) => ({
+      deck_id: deckId,
+      front: String(c?.front || '').slice(0, 2000),
+      back: String(c?.back || '').slice(0, 4000),
+      hint: c?.hint ? String(c.hint).slice(0, 500) : null,
+    }))
+    .filter((c) => c.front && c.back);
+
+  // Record the source (what the cards were generated from).
+  const { data: source } = await req.db
+    .from('sources')
+    .insert({ user_id: req.user.id, deck_id: deckId, kind: sourceKind, filename, char_count: charCount, summary, extracted_text: extractedText })
+    .select('id')
+    .single();
+
+  if (cards.length) {
+    const { error: cardErr } = await req.db.from('cards').insert(cards);
+    if (cardErr) {
+      console.error('[generate] card insert failed:', cardErr.message);
+      return res.status(500).json({ ok: false, error: 'Generated cards but could not save them.' });
+    }
+  }
+
+  return res.json({ ok: true, summary, cardsAdded: cards.length, sourceId: source?.id || null });
+});
+
+// List a deck's cards (for the deck view and the review queue).
+app.get('/api/decks/:id/cards', requireUser, async (req, res) => {
+  const { data, error } = await req.db
+    .from('cards')
+    .select('id, front, back, hint, ease, interval_days, repetitions, due_at')
+    .eq('deck_id', req.params.id)
+    .order('created_at', { ascending: true });
+  if (error) {
+    console.error('[cards] list failed:', error.message);
+    return res.status(500).json({ ok: false, error: 'Could not load cards.' });
+  }
+  return res.json({ ok: true, cards: data || [] });
+});
+
+// Grade a review with SM-2. grade: 0 Again, 3 Hard, 4 Good, 5 Easy.
+app.post('/api/cards/:id/review', requireUser, async (req, res) => {
+  const grade = Number(req.body?.grade);
+  if (![0, 3, 4, 5].includes(grade)) {
+    return res.status(400).json({ ok: false, error: 'Invalid grade.' });
+  }
+  const { data: card, error } = await req.db
+    .from('cards')
+    .select('id, ease, interval_days, repetitions')
+    .eq('id', req.params.id)
+    .maybeSingle();
+  if (error || !card) return res.status(404).json({ ok: false, error: 'Card not found.' });
+
+  let ease = card.ease;
+  let reps = card.repetitions;
+  let interval = card.interval_days;
+
+  if (grade < 3) {
+    reps = 0;
+    interval = 1;
+  } else {
+    reps += 1;
+    if (reps === 1) interval = 1;
+    else if (reps === 2) interval = 6;
+    else interval = Math.round(interval * ease);
+  }
+  ease = ease + (0.1 - (5 - grade) * (0.08 + (5 - grade) * 0.02));
+  if (ease < 1.3) ease = 1.3;
+
+  const dueAt = new Date(Date.now() + interval * 86400000).toISOString();
+  const { error: upErr } = await req.db
+    .from('cards')
+    .update({ ease, interval_days: interval, repetitions: reps, due_at: dueAt })
+    .eq('id', card.id);
+  if (upErr) {
+    console.error('[review] update failed:', upErr.message);
+    return res.status(500).json({ ok: false, error: 'Could not save the review.' });
+  }
+  return res.json({ ok: true, interval_days: interval, due_at: dueAt });
 });
 
 // ── Admin dashboard (Supabase Auth, superuser-gated, READ-ONLY) ─────────────

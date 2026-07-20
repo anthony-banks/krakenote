@@ -135,6 +135,38 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   .deck-title{font-family:var(--head);font-weight:700;font-size:16px}
   .deck-meta{font-size:13px;color:var(--muted);margin-top:2px}
   .deck-row .linkbtn{margin-left:auto}
+  .deck-row .deck-main{cursor:pointer;flex:1;min-width:0}
+
+  /* Deck detail: generate form + cards */
+  .gen-form{padding:18px 22px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:12px}
+  .gen-form textarea{width:100%;font-family:var(--body);font-size:15px;padding:12px 14px;border-radius:12px;border:1.5px solid var(--border);background:var(--surface-2);color:var(--text);outline:none;resize:vertical}
+  .gen-form textarea:focus{border-color:var(--accent)}
+  .gen-form .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .gen-form input[type=file]{font-family:var(--body);font-size:13px;color:var(--muted)}
+  .gen-summary{background:color-mix(in srgb,var(--accent) 10%,transparent);border:1px solid color-mix(in srgb,var(--accent) 26%,transparent);border-radius:12px;padding:12px 14px;font-size:14px;color:var(--text)}
+  .card-row{padding:14px 22px;border-bottom:1px solid var(--border)}
+  .card-row:last-child{border-bottom:0}
+  .card-row .q{font-family:var(--head);font-weight:600;font-size:15px}
+  .card-row .a{font-size:14px;color:var(--muted);margin-top:4px}
+
+  /* Review overlay */
+  .review-overlay{position:fixed;inset:0;z-index:60;background:color-mix(in srgb,var(--bg) 82%,#000);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;padding:20px}
+  .review-box{width:100%;max-width:560px;background:var(--surface);border:1px solid var(--border);border-radius:22px;padding:22px;box-shadow:0 24px 60px rgba(0,0,0,.35);display:flex;flex-direction:column;gap:16px}
+  .review-top{display:flex;align-items:center;justify-content:space-between}
+  .review-progress{font-family:var(--head);font-weight:600;font-size:13px;color:var(--muted)}
+  .review-card{min-height:180px;background:var(--surface-2);border:1px solid var(--border);border-radius:16px;padding:26px 22px;text-align:center;display:flex;flex-direction:column;justify-content:center;gap:10px}
+  .review-kicker{font-family:var(--head);font-weight:600;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--muted)}
+  .review-face{font-family:var(--head);font-weight:700;font-size:clamp(17px,2.6vw,21px);line-height:1.35;color:var(--text)}
+  .review-hint{font-size:13px;color:var(--muted)}
+  .review-answer{margin-top:6px;padding-top:12px;border-top:1px solid var(--border);font-size:15px;color:var(--text);line-height:1.45}
+  .review-box .revealBtn,.review-box>.btn-primary{width:100%;justify-content:center}
+  #revealBtn{width:100%;justify-content:center}
+  .grades{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  .grade{font-family:var(--head);font-weight:700;font-size:14px;padding:12px 6px;border-radius:12px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;transition:transform .12s ease,border-color .12s ease}
+  .grade:hover{transform:translateY(-2px);border-color:var(--accent)}
+  .grade small{display:block;font-weight:500;font-size:11px;color:var(--muted);margin-top:2px}
+  .grade[data-grade="0"]:hover{border-color:var(--danger)}
+  .review-done{text-align:center;color:var(--muted);font-size:15px}
 
   .boot{padding:70px 24px;text-align:center;color:var(--muted)}
 
@@ -279,7 +311,60 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       </div>
       <div id="decksList"></div>
     </div>
+
+    <!-- Deck detail: upload/generate material, list cards, launch review. -->
+    <div class="panel hidden" id="deckDetailPanel">
+      <div class="panel-head">
+        <button class="linkbtn" id="backToDecks" type="button">← Decks</button>
+        <h2 id="deckDetailTitle" style="margin-left:4px">Deck</h2>
+        <button class="btn btn-primary" id="reviewBtn" type="button" style="margin-left:auto" disabled>Review due (0)</button>
+      </div>
+
+      <div class="gen-form">
+        <textarea id="genText" rows="4" placeholder="Paste notes here — or choose a PDF / .txt / .md below — then let AI make flashcards."></textarea>
+        <div class="row">
+          <input type="file" id="genFile" accept=".pdf,.txt,.md,application/pdf,text/plain,text/markdown" />
+          <button class="btn btn-primary" id="genBtn" type="button">✨ Generate cards</button>
+        </div>
+        <div class="msg" id="genMsg"></div>
+        <div class="gen-summary hidden" id="genSummary"></div>
+      </div>
+
+      <div class="state" id="cardsState">
+        <span class="emoji">🐙</span>
+        <h3>Loading…</h3>
+        <p>Fetching cards.</p>
+      </div>
+      <div id="cardsList"></div>
+    </div>
   </main>
+
+  <!-- Review overlay: SM-2 flashcard session over the deck's due cards. -->
+  <div class="review-overlay hidden" id="reviewOverlay">
+    <div class="review-box">
+      <div class="review-top">
+        <span class="review-progress" id="reviewProgress"></span>
+        <button class="linkbtn" id="reviewClose" type="button">✕ Close</button>
+      </div>
+      <div class="review-card" id="reviewCard">
+        <div class="review-kicker">Question</div>
+        <div class="review-face" id="reviewFront"></div>
+        <div class="review-hint" id="reviewHint"></div>
+        <div class="review-answer hidden" id="reviewBack"></div>
+      </div>
+      <button class="btn btn-primary" id="revealBtn" type="button">Show answer</button>
+      <div class="grades hidden" id="gradeRow">
+        <button class="grade" type="button" data-grade="0">Again<small>&lt;1d</small></button>
+        <button class="grade" type="button" data-grade="3">Hard<small>soon</small></button>
+        <button class="grade" type="button" data-grade="4">Good<small>on track</small></button>
+        <button class="grade" type="button" data-grade="5">Easy<small>later</small></button>
+      </div>
+      <div class="review-done hidden" id="reviewDone">
+        <span style="font-size:36px;display:block;margin-bottom:10px">🎉</span>
+        <p>All caught up — nothing else due right now.</p>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script src="/vendor/supabase.js"></script>
@@ -364,6 +449,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     var isDecks = key === 'decks';
     $('genericPanel').classList.toggle('hidden', isDecks);
     $('decksPanel').classList.toggle('hidden', !isDecks);
+    $('deckDetailPanel').classList.add('hidden'); // always start on the deck list
     if (isDecks) loadDecks();
   }
 
@@ -456,7 +542,8 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     list.innerHTML = '';
     decksCache.forEach(function(d){
       var row = document.createElement('div'); row.className = 'deck-row';
-      var main = document.createElement('div');
+      var main = document.createElement('div'); main.className = 'deck-main';
+      main.addEventListener('click', function(){ openDeck(d); });
       var t = document.createElement('div'); t.className = 'deck-title'; t.textContent = d.title;
       var meta = document.createElement('div'); meta.className = 'deck-meta';
       var n = d.cardCount || 0;
@@ -500,6 +587,172 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     await loadDecks();
   }
 
+  // ── Deck detail: upload/generate material, list cards, review ──
+  var currentDeck = null, cardsCache = [];
+
+  function msgOn(id, kind, html){
+    var m = $(id); m.className = 'msg' + (kind ? ' ' + kind : '');
+    m.innerHTML = html || ''; if (!kind) m.style.display = 'none';
+  }
+  function cardsState(emoji, title, body){
+    var s = $('cardsState'); s.classList.remove('hidden');
+    s.innerHTML = '<span class="emoji"></span><h3></h3><p></p>';
+    s.querySelector('.emoji').textContent = emoji;
+    s.querySelector('h3').textContent = title;
+    s.querySelector('p').textContent = body;
+    $('cardsList').innerHTML = '';
+  }
+
+  async function openDeck(d){
+    currentDeck = d;
+    $('decksPanel').classList.add('hidden');
+    $('genericPanel').classList.add('hidden');
+    $('deckDetailPanel').classList.remove('hidden');
+    $('deckDetailTitle').textContent = d.title;
+    $('genText').value = ''; $('genFile').value = '';
+    msgOn('genMsg', null, ''); $('genSummary').classList.add('hidden');
+    await loadCards();
+  }
+
+  function backToDeckList(){
+    $('deckDetailPanel').classList.add('hidden');
+    $('decksPanel').classList.remove('hidden');
+    loadDecks();
+  }
+
+  function dueCount(){
+    var now = Date.now();
+    return cardsCache.filter(function(c){ return new Date(c.due_at).getTime() <= now; }).length;
+  }
+
+  function renderCards(){
+    var n = dueCount();
+    var rb = $('reviewBtn');
+    rb.textContent = 'Review due (' + n + ')';
+    rb.disabled = n === 0;
+    var list = $('cardsList');
+    if (!cardsCache.length){
+      cardsState('🃏', 'No cards yet', 'Paste notes or a PDF above and generate your first flashcards.');
+      return;
+    }
+    $('cardsState').classList.add('hidden');
+    list.innerHTML = '';
+    cardsCache.forEach(function(c){
+      var row = document.createElement('div'); row.className = 'card-row';
+      var q = document.createElement('div'); q.className = 'q'; q.textContent = c.front;
+      var a = document.createElement('div'); a.className = 'a'; a.textContent = c.back;
+      row.appendChild(q); row.appendChild(a); list.appendChild(row);
+    });
+  }
+
+  async function loadCards(){
+    cardsState('🐙', 'Loading…', 'Fetching cards.');
+    var out = await api('/api/decks/' + encodeURIComponent(currentDeck.id) + '/cards');
+    if (out.res.status === 401){ signOut(); return; }
+    if (!out.res.ok || !out.data.ok){
+      cardsState('🛠️', 'Almost there', 'Run the latest supabase/decks.sql migration (it adds the cards + sources tables), then refresh.');
+      return;
+    }
+    cardsCache = out.data.cards || [];
+    renderCards();
+  }
+
+  function readFileB64(file){
+    return new Promise(function(resolve, reject){
+      var r = new FileReader();
+      r.onload = function(){ resolve(String(r.result).split(',')[1] || ''); };
+      r.onerror = reject; r.readAsDataURL(file);
+    });
+  }
+  function readFileText(file){
+    return new Promise(function(resolve, reject){
+      var r = new FileReader();
+      r.onload = function(){ resolve(String(r.result || '')); };
+      r.onerror = reject; r.readAsText(file);
+    });
+  }
+
+  async function generate(){
+    var text = ($('genText').value || '').trim();
+    var f = $('genFile').files && $('genFile').files[0];
+    if (!text && !f){ msgOn('genMsg', 'err', 'Paste some notes or choose a file first.'); return; }
+
+    var btn = $('genBtn'); btn.disabled = true;
+    msgOn('genMsg', 'ok', 'Generating with AI — this can take several seconds…');
+    try {
+      var body = {};
+      if (f && (f.type === 'application/pdf' || /\.pdf$/i.test(f.name))){
+        body.file = { name: f.name, mediaType: 'application/pdf', dataBase64: await readFileB64(f) };
+      } else if (f){
+        var t = await readFileText(f);
+        body.text = (text ? text + '\n\n' : '') + t;
+      } else {
+        body.text = text;
+      }
+      var out = await api('/api/decks/' + encodeURIComponent(currentDeck.id) + '/generate',
+        { method:'POST', body: JSON.stringify(body) });
+      btn.disabled = false;
+      if (out.res.status === 401){ signOut(); return; }
+      if (!out.res.ok || !out.data.ok){ msgOn('genMsg', 'err', out.data.error || 'Generation failed.'); return; }
+      msgOn('genMsg', 'ok', 'Added ' + out.data.cardsAdded + ' card' + (out.data.cardsAdded === 1 ? '' : 's') + '.');
+      if (out.data.summary){
+        var s = $('genSummary'); s.classList.remove('hidden');
+        s.textContent = 'Summary — ' + out.data.summary;
+      }
+      $('genText').value = ''; $('genFile').value = '';
+      await loadCards();
+    } catch (ex){
+      btn.disabled = false;
+      msgOn('genMsg', 'err', 'Could not prepare the upload. Try a smaller file.');
+    }
+  }
+
+  // ── Review (SM-2) ──
+  var reviewQueue = [], reviewIdx = 0;
+
+  function showReviewCard(){
+    if (reviewIdx >= reviewQueue.length){
+      $('reviewCard').classList.add('hidden');
+      $('revealBtn').classList.add('hidden');
+      $('gradeRow').classList.add('hidden');
+      $('reviewProgress').textContent = '';
+      $('reviewDone').classList.remove('hidden');
+      return;
+    }
+    var c = reviewQueue[reviewIdx];
+    $('reviewDone').classList.add('hidden');
+    $('reviewCard').classList.remove('hidden');
+    $('reviewFront').textContent = c.front;
+    $('reviewHint').textContent = c.hint || '';
+    $('reviewBack').textContent = c.back;
+    $('reviewBack').classList.add('hidden');
+    $('revealBtn').classList.remove('hidden');
+    $('gradeRow').classList.add('hidden');
+    $('reviewProgress').textContent = (reviewIdx + 1) + ' / ' + reviewQueue.length;
+  }
+
+  function startReview(){
+    var now = Date.now();
+    reviewQueue = cardsCache.filter(function(c){ return new Date(c.due_at).getTime() <= now; });
+    reviewIdx = 0;
+    $('reviewOverlay').classList.remove('hidden');
+    showReviewCard();
+  }
+
+  function closeReview(){
+    $('reviewOverlay').classList.add('hidden');
+    loadCards(); // refresh due counts after grading
+  }
+
+  async function gradeCard(grade){
+    var c = reviewQueue[reviewIdx];
+    var out = await api('/api/cards/' + encodeURIComponent(c.id) + '/review',
+      { method:'POST', body: JSON.stringify({ grade: grade }) });
+    if (out.res.ok && out.data.ok){ c.due_at = out.data.due_at; }
+    reviewIdx += 1;
+    showReviewCard();
+  }
+
   async function signOut(){
     try { if (sb) await sb.auth.signOut(); } catch(e){}
     setMode('signin');
@@ -512,6 +765,18 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   $('newDeckBtn').addEventListener('click', showDeckForm);
   $('cancelDeckBtn').addEventListener('click', hideDeckForm);
   $('createDeckBtn').addEventListener('click', createDeck);
+  $('backToDecks').addEventListener('click', backToDeckList);
+  $('genBtn').addEventListener('click', generate);
+  $('reviewBtn').addEventListener('click', startReview);
+  $('reviewClose').addEventListener('click', closeReview);
+  $('revealBtn').addEventListener('click', function(){
+    $('reviewBack').classList.remove('hidden');
+    $('revealBtn').classList.add('hidden');
+    $('gradeRow').classList.remove('hidden');
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('#gradeRow .grade'), function(b){
+    b.addEventListener('click', function(){ gradeCard(parseInt(b.getAttribute('data-grade'), 10)); });
+  });
 
   $('authForm').addEventListener('submit', async function(e){
     e.preventDefault();

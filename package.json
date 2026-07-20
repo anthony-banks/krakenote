@@ -6,7 +6,8 @@
   "description": "Krakenote marketing landing + waitlist API",
   "scripts": {
     "start": "node server/index.js",
-    "dev": "node server/index.js"
+    "dev": "node server/index.js",
+    "deploy:staging": "railway up --detach --environment staging --service krakenote"
   },
   "engines": {
     "node": ">=20"

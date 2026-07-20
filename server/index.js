@@ -180,6 +180,90 @@ app.post('/api/auth/signup', async (req, res) => {
 // it renders the login view until Supabase reports a valid session.
 app.get('/app', (_req, res) => res.sendFile(join(SITE_DIR, 'app.html')));
 
+// ── User data API (RLS-enforced) ────────────────────────────────────────────
+// Each request runs AS the signed-in user: we verify their Supabase JWT, then
+// build a Supabase client carrying that token, so Row-Level Security is the
+// boundary — a user can only read or write their own rows, enforced by Postgres.
+
+function bearerToken(req) {
+  const h = (req.headers.authorization || '').toString();
+  return h.startsWith('Bearer ') ? h.slice(7).trim() : '';
+}
+
+async function requireUser(req, res, next) {
+  if (!supabase || !SUPABASE_ANON_KEY) {
+    return res.status(503).json({ ok: false, error: 'Accounts are not configured yet.' });
+  }
+  const token = bearerToken(req);
+  if (!token) return res.status(401).json({ ok: false, error: 'Authentication required.' });
+
+  const { data, error } = await supabase.auth.getUser(token);
+  if (error || !data?.user) {
+    return res.status(401).json({ ok: false, error: 'Session invalid or expired. Please sign in again.' });
+  }
+  req.user = data.user;
+  // A client bound to the caller's JWT → PostgREST applies RLS as this user.
+  req.db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    global: { headers: { Authorization: 'Bearer ' + token } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  return next();
+}
+
+// List the caller's decks, newest first, each with its card count.
+app.get('/api/decks', requireUser, async (req, res) => {
+  const { data, error } = await req.db
+    .from('decks')
+    .select('id, title, subject, created_at, cards(count)')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    // A missing table (migration not run) surfaces here — report it plainly.
+    console.error('[decks] list failed:', error.message);
+    return res.status(500).json({ ok: false, error: 'Could not load your decks.', detail: error.message });
+  }
+  const decks = (data || []).map((d) => ({
+    id: d.id,
+    title: d.title,
+    subject: d.subject,
+    created_at: d.created_at,
+    cardCount: Array.isArray(d.cards) && d.cards[0] ? d.cards[0].count : 0,
+  }));
+  return res.json({ ok: true, decks });
+});
+
+// Create a deck owned by the caller. user_id is set server-side and the RLS
+// WITH CHECK policy independently verifies it matches the token — belt and braces.
+app.post('/api/decks', requireUser, async (req, res) => {
+  const title = typeof req.body?.title === 'string' ? req.body.title.trim() : '';
+  const subject = typeof req.body?.subject === 'string' ? req.body.subject.trim() : '';
+  if (!title) return res.status(400).json({ ok: false, error: 'A deck title is required.' });
+  if (title.length > 120) return res.status(400).json({ ok: false, error: 'Title is too long (max 120 characters).' });
+
+  const { data, error } = await req.db
+    .from('decks')
+    .insert({ user_id: req.user.id, title, subject: subject || null })
+    .select('id, title, subject, created_at')
+    .single();
+
+  if (error) {
+    console.error('[decks] create failed:', error.message);
+    return res.status(500).json({ ok: false, error: 'Could not create the deck.' });
+  }
+  return res.json({ ok: true, deck: { ...data, cardCount: 0 } });
+});
+
+// Delete one of the caller's decks (its cards cascade). RLS makes it impossible
+// to delete a deck you don't own — a mismatched id simply affects zero rows.
+app.delete('/api/decks/:id', requireUser, async (req, res) => {
+  const { error } = await req.db.from('decks').delete().eq('id', req.params.id);
+  if (error) {
+    console.error('[decks] delete failed:', error.message);
+    return res.status(500).json({ ok: false, error: 'Could not delete the deck.' });
+  }
+  return res.json({ ok: true });
+});
+
 // ── Admin dashboard (Supabase Auth, superuser-gated, READ-ONLY) ─────────────
 // Login is proxied through the server so Supabase keys never touch the browser.
 // Only emails in SUPERUSER_EMAILS may sign in or read admin data. Every DB call

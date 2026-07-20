@@ -290,23 +290,27 @@ const CARD_SCHEMA = {
         type: 'object',
         additionalProperties: false,
         properties: {
+          type: { type: 'string', enum: ['basic', 'cloze'] },
           front: { type: 'string' },
           back: { type: 'string' },
           hint: { type: 'string' },
         },
-        required: ['front', 'back', 'hint'],
+        required: ['type', 'front', 'back', 'hint'],
       },
     },
   },
   required: ['summary', 'cards'],
 };
 
+// Strict grounding: cards come ONLY from the supplied material. Two card kinds.
 const GEN_SYSTEM =
-  "You are Krakenote's study-material generator. From the provided material, write a concise summary " +
-  '(2-4 sentences) and a set of high-quality spaced-repetition flashcards. Each card is an atomic ' +
-  'question (front) with a correct, self-contained answer (back), plus a short hint (empty string if ' +
-  'none). Produce 5-20 cards depending on the depth of the material. Never invent facts the material ' +
-  'does not support.';
+  "You are Krakenote's study-material generator. Use ONLY facts explicitly present in the provided " +
+  'material — never outside knowledge, and never invent or infer facts the material does not state. ' +
+  'Write a concise 2-4 sentence summary, then high-quality spaced-repetition flashcards of two kinds: ' +
+  '"basic" (a question on the front, its correct answer on the back) and "cloze" (a sentence taken from ' +
+  'the material with one key term replaced by "____" on the front, and that exact term on the back). ' +
+  'Prefer atomic, single-fact cards; add a short hint or an empty string. Produce 5-20 cards scaled to ' +
+  'the depth of the material — if it is too thin to support a card, produce fewer rather than padding.';
 
 // POST /api/decks/:id/generate  { text? , file?: {name, mediaType, dataBase64} }
 app.post('/api/decks/:id/generate', requireUser, async (req, res) => {
@@ -366,39 +370,73 @@ app.post('/api/decks/:id/generate', requireUser, async (req, res) => {
   }
 
   const summary = typeof result.summary === 'string' ? result.summary : '';
+  // Proposals only — nothing is written. The user reviews/edits, then approves
+  // via POST /api/decks/:id/cards, so a discarded generation leaves no trace.
   const cards = (Array.isArray(result.cards) ? result.cards : [])
     .slice(0, 40)
     .map((c) => ({
-      deck_id: deckId,
+      type: c?.type === 'cloze' ? 'cloze' : 'basic',
       front: String(c?.front || '').slice(0, 2000),
       back: String(c?.back || '').slice(0, 4000),
+      hint: c?.hint ? String(c.hint).slice(0, 500) : '',
+    }))
+    .filter((c) => c.front && c.back);
+
+  return res.json({
+    ok: true,
+    summary,
+    cards,
+    source: { kind: sourceKind, filename, charCount },
+  });
+});
+
+// Approve step: persist edited/kept cards (and a source record) to the deck.
+// Separate from generation so review-and-approve is a real gate, not cosmetic.
+app.post('/api/decks/:id/cards', requireUser, async (req, res) => {
+  const deckId = req.params.id;
+  const { data: deck, error: deckErr } = await req.db.from('decks').select('id').eq('id', deckId).maybeSingle();
+  if (deckErr || !deck) return res.status(404).json({ ok: false, error: 'Deck not found.' });
+
+  const incoming = Array.isArray(req.body?.cards) ? req.body.cards : [];
+  const rows = incoming
+    .slice(0, 60)
+    .map((c) => ({
+      deck_id: deckId,
+      card_type: c?.type === 'cloze' ? 'cloze' : 'basic',
+      front: String(c?.front || '').trim().slice(0, 2000),
+      back: String(c?.back || '').trim().slice(0, 4000),
       hint: c?.hint ? String(c.hint).slice(0, 500) : null,
     }))
     .filter((c) => c.front && c.back);
 
-  // Record the source (what the cards were generated from).
-  const { data: source } = await req.db
-    .from('sources')
-    .insert({ user_id: req.user.id, deck_id: deckId, kind: sourceKind, filename, char_count: charCount, summary, extracted_text: extractedText })
-    .select('id')
-    .single();
+  if (!rows.length) return res.status(400).json({ ok: false, error: 'No cards to add.' });
 
-  if (cards.length) {
-    const { error: cardErr } = await req.db.from('cards').insert(cards);
-    if (cardErr) {
-      console.error('[generate] card insert failed:', cardErr.message);
-      return res.status(500).json({ ok: false, error: 'Generated cards but could not save them.' });
-    }
+  // Record the source these cards came from (summary + metadata; no raw text kept for alpha).
+  const src = req.body?.source;
+  if (src && typeof src === 'object') {
+    await req.db.from('sources').insert({
+      user_id: req.user.id,
+      deck_id: deckId,
+      kind: typeof src.kind === 'string' ? src.kind : 'text',
+      filename: typeof src.filename === 'string' ? src.filename.slice(0, 200) : null,
+      char_count: Number.isFinite(src.charCount) ? src.charCount : 0,
+      summary: typeof src.summary === 'string' ? src.summary.slice(0, 4000) : null,
+    });
   }
 
-  return res.json({ ok: true, summary, cardsAdded: cards.length, sourceId: source?.id || null });
+  const { error } = await req.db.from('cards').insert(rows);
+  if (error) {
+    console.error('[cards] bulk insert failed:', error.message);
+    return res.status(500).json({ ok: false, error: 'Could not save the cards.' });
+  }
+  return res.json({ ok: true, added: rows.length });
 });
 
 // List a deck's cards (for the deck view and the review queue).
 app.get('/api/decks/:id/cards', requireUser, async (req, res) => {
   const { data, error } = await req.db
     .from('cards')
-    .select('id, front, back, hint, ease, interval_days, repetitions, due_at')
+    .select('id, card_type, front, back, hint, ease, interval_days, repetitions, due_at')
     .eq('deck_id', req.params.id)
     .order('created_at', { ascending: true });
   if (error) {

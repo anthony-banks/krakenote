@@ -18,6 +18,7 @@ create table if not exists public.decks (
 create table if not exists public.cards (
   id            uuid primary key default gen_random_uuid(),
   deck_id       uuid not null references public.decks(id) on delete cascade,
+  card_type     text not null default 'basic',   -- 'basic' | 'cloze'
   front         text not null,
   back          text not null,
   hint          text,
@@ -42,6 +43,9 @@ create table if not exists public.sources (
   extracted_text text,
   created_at     timestamptz not null default now()
 );
+
+-- Additive: bring an already-created cards table up to the current shape.
+alter table public.cards add column if not exists card_type text not null default 'basic';
 
 create index if not exists decks_user_id_idx on public.decks(user_id);
 create index if not exists cards_deck_id_idx on public.cards(deck_id);

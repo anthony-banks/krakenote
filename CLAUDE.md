@@ -22,7 +22,7 @@ Krakenote is an AI-first study app — **iOS (SwiftUI)** + **companion web app**
 |------|------|
 | `site/` | Marketing landing page + legal/support pages (static HTML) |
 | `server/` | Express server: serves `site/` + `POST /api/waitlist` → Supabase |
-| `supabase/schema.sql` | Waitlist table schema |
+| `supabase/migrations/` | Postgres schema as versioned migrations — apply with `supabase db push` (never paste SQL by hand) |
 | `docs/PRD.md` | Product requirements (source of truth) |
 
 ## Infrastructure
@@ -30,7 +30,7 @@ Krakenote is an AI-first study app — **iOS (SwiftUI)** + **companion web app**
 - **Hosting:** Railway, project `krakenote` (workspace: *anthony-banks's Projects*). Auto-deploys from GitHub.
   - **production** env ← `main` branch → `krakenote-production.up.railway.app` + `www.krakenote.com`
   - **staging** env → `krakenote-staging.up.railway.app`
-- **Database:** Supabase — **separate projects** for prod and staging (test data never touches prod).
+- **Database:** Supabase — **separate projects** for prod and staging (test data never touches prod). Schema lives in `supabase/migrations/` (Supabase CLI). Change flow: add a migration with `supabase migration new <name>`, then `supabase db push` (after a one-time `supabase login` + `supabase link --project-ref <ref>`). Never hand-paste SQL in the dashboard.
 - **Secrets:** `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` live only as Railway env vars, never committed. The service/secret key bypasses RLS and must never reach the browser.
 - **Domain:** `krakenote.com` at GoDaddy → CNAME `www` → Railway; apex 301-forwards to `www`.
 

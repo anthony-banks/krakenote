@@ -1,10 +1,9 @@
--- Krakenote study data: decks + cards (PRD §7).
--- Run in the Supabase dashboard: SQL Editor → New query → paste → Run.
--- Safe to re-run: tables/policies are guarded with IF NOT EXISTS / DROP IF EXISTS.
+-- Krakenote study data: decks + cards + sources (PRD §7).
+-- Idempotent (IF NOT EXISTS / DROP POLICY IF EXISTS) so it is safe to re-apply.
 --
 -- Auth is browser-side with the anon key; Row-Level Security is the boundary.
 -- Every row is scoped to its owner, so a signed-in user can only ever touch
--- their own decks and cards — enforced by Postgres, not by app code.
+-- their own rows — enforced by Postgres, not by app code.
 
 create table if not exists public.decks (
   id          uuid primary key default gen_random_uuid(),
@@ -30,8 +29,8 @@ create table if not exists public.cards (
   created_at    timestamptz not null default now()
 );
 
--- Uploaded / pasted study material an AI generation ran on. Keeps the source
--- text and the AI summary so a deck's material is reviewable after the fact.
+-- Uploaded / pasted material an AI generation ran on. Keeps the source metadata
+-- and AI summary so a deck's material is reviewable after the fact.
 create table if not exists public.sources (
   id             uuid primary key default gen_random_uuid(),
   user_id        uuid not null references auth.users(id) on delete cascade,

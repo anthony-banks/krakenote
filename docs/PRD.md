@@ -81,6 +81,11 @@ Build for all ages; **market to college students and adult exam/cert learners (1
 
 **5.1 Capture & ingestion.** Sources: camera (VisionKit document scanner), photo library, PDF/file import (iOS file importer; web drag-drop). Pipeline: images → Vision OCR on-device; text PDFs → PDFKit text extraction; scanned PDFs → render pages → Vision OCR; `.docx` → parsed server-side (web-first). Extracted text (never raw images) is sent to the generation service to keep cost and latency low and privacy high.
 
+**Ingestion backlog (added 2026-07-22).** Web app currently ingests pasted text, PDF, and `.txt`/`.md`. Planned next:
+- **Image drag-and-drop.** Drop a photo/screenshot of notes onto the web app → generate cards from it. Send the image to Claude as an image block (Claude vision handles OCR) — **no new key or OCR service needed**, same Anthropic key. Mirrors the iOS photo-library path.
+- **Article / link parsing.** Paste a URL → fetch the page server-side, extract the main article text (readability-style), then generate as usual. Needs a server-side fetch + HTML-to-text step (library, no external key). Guard against non-article pages and large fetches; respect robots/paywalls.
+- **`.docx` / `.pptx`.** Parse server-side (e.g. `mammoth` for docx) to text, then generate. Library dependency, no key.
+
 **5.2 Generation.** Backend service returns strict JSON: an array of cards `{front, back, hint?}` and quiz items `{question, choices[4], answerIndex, explanation}`. Validate; retry once on malformed JSON.
 
 **5.3 Review (retention core).** SM-2 scheduler per card (ease, interval, due date). "Review today" queue surfaces due cards; grading (Again/Hard/Good/Easy) updates the schedule. Runs fully offline.

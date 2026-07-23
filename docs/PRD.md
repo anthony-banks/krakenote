@@ -81,6 +81,11 @@ Build for all ages; **market to college students and adult exam/cert learners (1
 
 **5.1 Capture & ingestion.** Sources: camera (VisionKit document scanner), photo library, PDF/file import (iOS file importer; web drag-drop). Pipeline: images → Vision OCR on-device; text PDFs → PDFKit text extraction; scanned PDFs → render pages → Vision OCR; `.docx` → parsed server-side (web-first). Extracted text (never raw images) is sent to the generation service to keep cost and latency low and privacy high.
 
+**Ingestion backlog (added 2026-07-22).** Web app currently ingests pasted text, PDF, and `.txt`/`.md`. Planned next:
+- **Image drag-and-drop.** Drop a photo/screenshot of notes onto the web app → generate cards from it. Send the image to Claude as an image block (Claude vision handles OCR) — **no new key or OCR service needed**, same Anthropic key. Mirrors the iOS photo-library path.
+- **Article / link parsing.** Paste a URL → fetch the page server-side, extract the main article text (readability-style), then generate as usual. Needs a server-side fetch + HTML-to-text step (library, no external key). Guard against non-article pages and large fetches; respect robots/paywalls.
+- **`.docx` / `.pptx`.** Parse server-side (e.g. `mammoth` for docx) to text, then generate. Library dependency, no key.
+
 **5.2 Generation.** Backend service returns strict JSON: an array of cards `{front, back, hint?}` and quiz items `{question, choices[4], answerIndex, explanation}`. Validate; retry once on malformed JSON.
 
 **5.3 Review (retention core).** SM-2 scheduler per card (ease, interval, due date). "Review today" queue surfaces due cards; grading (Again/Hard/Good/Easy) updates the schedule. Runs fully offline.
@@ -89,7 +94,7 @@ Build for all ages; **market to college students and adult exam/cert learners (1
 
 **5.5 Tutor mode (v1.1).** One surface, three actions: **Show the work** (step-by-step solution, KaTeX math), **More like this** (generate fresh practice at a chosen difficulty), **Critique my work** (user submits a solution/essay → rubric-style feedback with specific fixes). Guardrail: label AI math as a study aid, let users flag a bad step, and verify final numeric/algebraic answers with a symbolic engine (e.g., a SymPy service) before presenting them as correct.
 
-**5.6 Companion web.** v1: auth (Sign in with Apple + email), billing, and full **read** access to decks/cards/quiz history/progress dashboards, plus document upload. It reads the same backend as iOS. v2: full study parity + web checkout.
+**5.6 Companion web.** v1: auth (Sign in with Apple + email), billing, and dashboards for decks/cards/quiz history/progress, plus document upload. **AMENDED 2026-07-20 — web is not read-only: both iOS and web can upload material and create/review study content, reading and writing the same Supabase backend (RLS-scoped per user).** This decouples the web app from iOS so it is usable on its own; iOS is no longer a prerequisite for content to exist. Original plan had web as read-only mirror of iOS-created data — dropped because it left web empty with no iOS app yet. v2: full study parity + web checkout.
 
 **5.7 Audio Study Mode (SHAPING — idea captured, not yet scoped to a version).** The passive, hands-free counterpart to flashcards: "walk with your notes." Where cards are active recall (lean-in, screen-on), this is ambient review (lean-back, screen-off) — it turns commuting, walking, and the gym into study time. Available on both **web and mobile**.
 

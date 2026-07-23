@@ -86,6 +86,37 @@ people skip and regret — nothing visibly errors when it breaks.
 
 ---
 
+## `SUPABASE_ANON_KEY` required for web accounts — ACTION NEEDED
+
+The web app (`/app`) needs a new env var in **both** Railway environments before
+sign-in works. Without it `/api/config` returns 503 and the page shows an honest
+"accounts are not set up yet" state rather than breaking.
+
+| Var | Where | Value |
+|---|---|---|
+| `SUPABASE_ANON_KEY` | Railway → production **and** staging | Supabase → Project Settings → API → Project API keys → **anon / public** |
+
+Use each environment's **own** project key — staging and prod are separate Supabase
+projects. This key is safe in the browser by design: RLS, not key secrecy, is the
+boundary. Do **not** use the service-role key here.
+
+---
+
+## Staging does NOT deploy from the `staging` branch (found 2026-07-19)
+
+The Railway **staging** environment builds from **`main`**, not from the `staging`
+branch. Confirmed by observation: staging serves `admin.html` and `/api/admin/login`
+from PR #5, which never existed on the `staging` branch.
+
+Consequence: **pushing to `staging` deploys nothing.** Branch-based staging deploys
+are not enabled, despite what `CLAUDE.md`'s workflow note implies.
+
+To enable: Railway → `krakenote` project → **staging** env → service → Settings →
+Source → set the deploy branch to `staging`. Until then, the only way to preview a
+branch is locally (`npm start`) or by merging to `main`, which ships production.
+
+---
+
 ## Admin dashboard follow-ups (from PR #5) — not started
 
 - `server/index.js` — the login client is built with `SUPABASE_SERVICE_ROLE_KEY` for

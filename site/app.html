@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Krakenote — Your study dashboard</title>
+<meta name="robots" content="noindex, nofollow" />
+<meta name="theme-color" content="#26364f" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<!-- set theme before paint to avoid a flash -->
+<script>(function(){try{var r=document.documentElement,s=localStorage.getItem('theme'),
+sys=matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';
+r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --head:'Poppins',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    --body:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    --bg:#26364f; --surface:#2f4267; --surface-2:#3a5079;
+    --text:#eef0f6; --muted:#a9b6ca; --border:rgba(233,231,241,.13);
+    --accent:#7fb2ff; --accent2:#8a7dff; --cta:#6c63ff; --cta-text:#ffffff;
+    --cta-shadow:rgba(108,99,255,.38); --danger:#ff8674;
+    --nav-bg:rgba(38,54,79,.72); --mark:url(/mark-dark.svg);
+  }
+  :root[data-theme="light"]{
+    --bg:#f4f5fb; --surface:#ffffff; --surface-2:#eef0f8;
+    --text:#161826; --muted:#5b6678; --border:rgba(20,22,45,.10);
+    --accent:#4f5bd5; --accent2:#6c63ff; --cta:#5b52e6; --cta-text:#ffffff;
+    --cta-shadow:rgba(91,82,230,.26); --danger:#d94a38;
+    --nav-bg:rgba(244,245,251,.82); --mark:url(/mark-light.svg);
+  }
+  @media (prefers-color-scheme: light){
+    :root:not([data-theme="dark"]){
+      --bg:#f4f5fb; --surface:#ffffff; --surface-2:#eef0f8;
+      --text:#161826; --muted:#5b6678; --border:rgba(20,22,45,.10);
+      --accent:#4f5bd5; --accent2:#6c63ff; --cta:#5b52e6; --cta-text:#ffffff;
+      --cta-shadow:rgba(91,82,230,.26); --danger:#d94a38;
+      --nav-bg:rgba(244,245,251,.82); --mark:url(/mark-light.svg);
+    }
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--body);color:var(--text);background:var(--bg);line-height:1.6;-webkit-font-smoothing:antialiased}
+  .mark{display:inline-block;background:var(--mark) center/contain no-repeat}
+  .hidden{display:none!important}
+
+  /* Brand icons are a fixed navy in source, so mask them and paint with
+     currentColor — they then follow light/dark and active states for free. */
+  .ic{display:inline-block;width:20px;height:20px;background:currentColor;flex:none;
+      -webkit-mask:var(--i) center/contain no-repeat;mask:var(--i) center/contain no-repeat}
+
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;font-family:var(--head);font-weight:700;border:0;border-radius:14px;cursor:pointer;transition:transform .15s ease,box-shadow .15s ease;font-size:15px}
+  .btn-primary{background:var(--cta);color:var(--cta-text);padding:12px 22px;box-shadow:0 10px 30px var(--cta-shadow)}
+  .btn-primary:hover{transform:translateY(-2px);box-shadow:0 16px 42px var(--cta-shadow)}
+  .btn:disabled{opacity:.6;cursor:default;transform:none}
+  .linkbtn{display:inline-flex;align-items:center;gap:8px;background:transparent;color:var(--muted);border:1px solid var(--border);padding:10px 16px;border-radius:14px;font-family:var(--head);font-weight:600;font-size:14px;cursor:pointer}
+  .linkbtn:hover{color:var(--accent);border-color:var(--accent)}
+
+  nav{position:sticky;top:0;z-index:50;background:var(--nav-bg);backdrop-filter:blur(12px);border-bottom:1px solid var(--border)}
+  nav .bar{display:flex;align-items:center;justify-content:space-between;height:70px;padding:0 24px;gap:14px}
+  .brand{display:flex;align-items:center;gap:10px;font-family:var(--head);font-weight:800;font-size:22px;letter-spacing:-.5px;color:var(--text);text-decoration:none}
+  .brand .mark{width:47px;height:35px}
+  .navright{display:flex;align-items:center;gap:12px}
+  #whoami{color:var(--muted);font-size:14px;max-width:34vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .theme-toggle{background:transparent;border:1px solid var(--border);color:var(--muted);width:40px;height:40px;border-radius:12px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
+  .theme-toggle:hover{color:var(--accent);border-color:var(--accent)}
+  /* Sun in dark mode (tap for light), moon in light mode (tap for dark). */
+  .theme-toggle svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .ic-moon{display:none}
+  :root[data-theme="light"] .ic-sun{display:none}
+  :root[data-theme="light"] .ic-moon{display:block}
+  @media (prefers-color-scheme: light){
+    :root:not([data-theme="dark"]) .ic-sun{display:none}
+    :root:not([data-theme="dark"]) .ic-moon{display:block}
+  }
+  .menu-btn{display:none}
+
+  /* ── Auth ── */
+  .auth{max-width:420px;margin:56px auto;padding:0 24px}
+  .auth-card{background:var(--surface);border:1px solid var(--border);border-radius:22px;padding:34px}
+  .auth h1{font-family:var(--head);font-weight:800;font-size:25px;letter-spacing:-.5px;margin-bottom:6px}
+  .auth .sub{color:var(--muted);font-size:14px;margin-bottom:22px}
+  .auth label{display:block;font-family:var(--head);font-weight:600;font-size:13px;margin-bottom:8px}
+  .auth input{width:100%;font-family:var(--body);font-size:16px;padding:14px 16px;border-radius:14px;border:1.5px solid var(--border);background:var(--surface-2);color:var(--text);outline:none;margin-bottom:16px}
+  .auth input:focus{border-color:var(--accent)}
+  .auth .btn-primary{width:100%}
+  .msg{display:none;font-family:var(--head);font-weight:600;font-size:14px;margin-bottom:14px;padding:11px 14px;border-radius:12px;line-height:1.45}
+  .msg.err{display:block;color:var(--danger);background:color-mix(in srgb,var(--danger) 12%,transparent);border:1px solid color-mix(in srgb,var(--danger) 30%,transparent)}
+  .msg.ok{display:block;color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);border:1px solid color-mix(in srgb,var(--accent) 30%,transparent)}
+  .msg a{color:inherit}
+  .switch{text-align:center;font-size:14px;color:var(--muted);margin-top:20px}
+  .switch button{background:none;border:0;color:var(--accent);font-family:var(--head);font-weight:600;font-size:14px;cursor:pointer;padding:0}
+  .switch button:hover{text-decoration:underline}
+  .fineprint{font-size:12.5px;color:var(--muted);margin-top:18px;text-align:center;line-height:1.5}
+
+  /* ── App shell ── */
+  .shell{display:grid;grid-template-columns:236px 1fr;min-height:calc(100vh - 70px)}
+  aside{border-right:1px solid var(--border);padding:22px 14px;display:flex;flex-direction:column;gap:6px}
+  .navlink{display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:13px;font-family:var(--head);font-weight:600;font-size:14.5px;color:var(--muted);background:none;border:0;width:100%;text-align:left;cursor:pointer;transition:background .12s ease,color .12s ease}
+  .navlink:hover{color:var(--text);background:var(--surface)}
+  .navlink.active{color:var(--cta-text);background:var(--cta);box-shadow:0 8px 22px var(--cta-shadow)}
+  :root[data-theme="light"] .navlink.active{color:#fff}
+  .aside-sep{flex:1}
+  .signout-side{color:var(--muted)}
+  .signout-side:hover{color:var(--danger);background:color-mix(in srgb,var(--danger) 10%,transparent)}
+
+  main{padding:34px 30px 70px;min-width:0}
+  .head-row{margin-bottom:26px}
+  .head-row h1{font-family:var(--head);font-weight:800;font-size:clamp(24px,3.2vw,33px);letter-spacing:-1px}
+  .head-row p{color:var(--muted);font-size:15px;margin-top:6px}
+
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:16px;margin-bottom:26px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:22px}
+  .card .label{display:flex;align-items:center;gap:8px;font-family:var(--head);font-weight:600;text-transform:uppercase;letter-spacing:1px;font-size:11.5px;color:var(--accent);margin-bottom:10px}
+  .card .big{font-family:var(--head);font-weight:800;font-size:40px;line-height:1;letter-spacing:-1px}
+  .card .hint{font-size:13px;color:var(--muted);margin-top:7px}
+
+  .panel{background:var(--surface);border:1px solid var(--border);border-radius:20px;overflow:hidden}
+  .panel-head{display:flex;align-items:center;gap:10px;padding:17px 22px;border-bottom:1px solid var(--border)}
+  .panel-head h2{font-family:var(--head);font-weight:700;font-size:17px}
+  .state{padding:56px 26px;text-align:center;color:var(--muted)}
+  .state .emoji{font-size:38px;display:block;margin-bottom:14px}
+  .state h3{font-family:var(--head);font-weight:700;font-size:19px;color:var(--text);margin-bottom:8px}
+  .state p{max-width:430px;margin:0 auto;font-size:14.5px}
+
+  /* Decks */
+  .deck-form{padding:18px 22px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:12px}
+  .deck-form input{font-family:var(--body);font-size:15px;padding:12px 14px;border-radius:12px;border:1.5px solid var(--border);background:var(--surface-2);color:var(--text);outline:none}
+  .deck-form input:focus{border-color:var(--accent)}
+  .deck-form .row{display:flex;gap:10px;align-items:center}
+  .deck-row{display:flex;align-items:center;gap:14px;padding:16px 22px;border-bottom:1px solid var(--border)}
+  .deck-row:last-child{border-bottom:0}
+  .deck-row:hover{background:color-mix(in srgb,var(--accent) 7%,transparent)}
+  .deck-title{font-family:var(--head);font-weight:700;font-size:16px}
+  .deck-meta{font-size:13px;color:var(--muted);margin-top:2px}
+  .deck-row .linkbtn{margin-left:auto}
+  .deck-row .deck-main{cursor:pointer;flex:1;min-width:0}
+
+  /* Deck detail: generate form + cards */
+  .gen-form{padding:18px 22px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:12px}
+  .gen-form textarea{width:100%;font-family:var(--body);font-size:15px;padding:12px 14px;border-radius:12px;border:1.5px solid var(--border);background:var(--surface-2);color:var(--text);outline:none;resize:vertical}
+  .gen-form textarea:focus{border-color:var(--accent)}
+  .gen-form .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .gen-form input[type=file]{font-family:var(--body);font-size:13px;color:var(--muted)}
+  .gen-summary{background:color-mix(in srgb,var(--accent) 10%,transparent);border:1px solid color-mix(in srgb,var(--accent) 26%,transparent);border-radius:12px;padding:12px 14px;font-size:14px;color:var(--text)}
+  .gen-preview{display:flex;flex-direction:column;gap:12px;border-top:1px solid var(--border);padding-top:14px}
+  .prev-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  .prev-head span{font-family:var(--head);font-weight:600;font-size:14px;color:var(--text)}
+  .prev-actions{display:flex;gap:10px}
+  .prev-card{background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px}
+  .prev-toprow{display:flex;align-items:center;justify-content:space-between}
+  .prev-type{font-family:var(--head);font-weight:700;font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent);border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);padding:2px 8px;border-radius:999px}
+  .prev-card textarea{width:100%;font-family:var(--body);font-size:14px;padding:8px 10px;border-radius:9px;border:1px solid var(--border);background:var(--surface);color:var(--text);outline:none;resize:vertical}
+  .prev-card textarea:focus{border-color:var(--accent)}
+  .prev-card textarea.pf{font-weight:600}
+  .card-row{padding:14px 22px;border-bottom:1px solid var(--border)}
+  .card-row:last-child{border-bottom:0}
+  .card-row .q{font-family:var(--head);font-weight:600;font-size:15px}
+  .card-row .a{font-size:14px;color:var(--muted);margin-top:4px}
+
+  /* Review overlay */
+  .review-overlay{position:fixed;inset:0;z-index:60;background:color-mix(in srgb,var(--bg) 82%,#000);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;padding:20px}
+  .review-box{width:100%;max-width:560px;background:var(--surface);border:1px solid var(--border);border-radius:22px;padding:22px;box-shadow:0 24px 60px rgba(0,0,0,.35);display:flex;flex-direction:column;gap:16px}
+  .review-top{display:flex;align-items:center;justify-content:space-between}
+  .review-progress{font-family:var(--head);font-weight:600;font-size:13px;color:var(--muted)}
+  .review-card{min-height:180px;background:var(--surface-2);border:1px solid var(--border);border-radius:16px;padding:26px 22px;text-align:center;display:flex;flex-direction:column;justify-content:center;gap:10px}
+  .review-kicker{font-family:var(--head);font-weight:600;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--muted)}
+  .review-face{font-family:var(--head);font-weight:700;font-size:clamp(17px,2.6vw,21px);line-height:1.35;color:var(--text)}
+  .review-hint{font-size:13px;color:var(--muted)}
+  .review-answer{margin-top:6px;padding-top:12px;border-top:1px solid var(--border);font-size:15px;color:var(--text);line-height:1.45}
+  .review-box .revealBtn,.review-box>.btn-primary{width:100%;justify-content:center}
+  #revealBtn{width:100%;justify-content:center}
+  .grades{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  .grade{font-family:var(--head);font-weight:700;font-size:14px;padding:12px 6px;border-radius:12px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;transition:transform .12s ease,border-color .12s ease}
+  .grade:hover{transform:translateY(-2px);border-color:var(--accent)}
+  .grade small{display:block;font-weight:500;font-size:11px;color:var(--muted);margin-top:2px}
+  .grade[data-grade="0"]:hover{border-color:var(--danger)}
+  .review-done{text-align:center;color:var(--muted);font-size:15px}
+
+  .boot{padding:70px 24px;text-align:center;color:var(--muted)}
+
+  @media(max-width:820px){
+    .shell{grid-template-columns:1fr}
+    aside{position:fixed;top:70px;left:0;bottom:0;width:236px;background:var(--bg);z-index:40;transform:translateX(-100%);transition:transform .2s ease}
+    aside.open{transform:translateX(0)}
+    .menu-btn{display:inline-flex}
+    main{padding:26px 20px 60px}
+    #whoami{display:none}
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="bar">
+    <div style="display:flex;align-items:center;gap:10px">
+      <button class="theme-toggle menu-btn" id="menuBtn" type="button" aria-label="Toggle navigation" aria-expanded="false">
+        <i class="ic" style="--i:url(/icons/list.svg)"></i>
+      </button>
+      <a class="brand" href="/"><i class="mark"></i>Krakenote</a>
+    </div>
+    <div class="navright">
+      <span id="whoami"></span>
+      <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle dark mode">
+        <svg class="ic-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="ic-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/></svg>
+      </button>
+      <button id="signoutTop" class="linkbtn hidden" type="button">
+        <i class="ic" style="width:16px;height:16px;--i:url(/icons/x.svg)"></i>Sign out
+      </button>
+    </div>
+  </div>
+</nav>
+
+<!-- Booting: we don't know yet whether there's a session. -->
+<div id="bootView" class="boot">
+  <span style="font-size:34px;display:block;margin-bottom:12px">🐙</span>
+  Loading your dashboard…
+</div>
+
+<!-- ── Auth ── -->
+<section id="authView" class="auth hidden">
+  <div class="auth-card">
+    <h1 id="authTitle">Welcome back</h1>
+    <p class="sub" id="authSub">Sign in to your Krakenote account.</p>
+
+    <div class="msg" id="authMsg"></div>
+
+    <form id="authForm" novalidate>
+      <label for="em">Email</label>
+      <input type="email" id="em" autocomplete="username" placeholder="you@email.com" required />
+      <label for="pw">Password</label>
+      <input type="password" id="pw" autocomplete="current-password" placeholder="••••••••" required />
+      <button class="btn btn-primary" type="submit" id="authBtn">Sign in</button>
+    </form>
+
+    <div class="switch">
+      <span id="switchText">New here?</span>
+      <button type="button" id="switchBtn">Create an account</button>
+    </div>
+    <p class="fineprint" id="fineprint">
+      Accounts are limited to people on the waitlist while we're in early access.
+    </p>
+  </div>
+</section>
+
+<!-- ── Dashboard shell ── -->
+<div id="appView" class="shell hidden">
+  <aside id="sidebar">
+    <button class="navlink active" data-view="home"><i class="ic" style="--i:url(/icons/home.svg)"></i>Home</button>
+    <button class="navlink" data-view="decks"><i class="ic" style="--i:url(/icons/list.svg)"></i>Decks</button>
+    <button class="navlink" data-view="review"><i class="ic" style="--i:url(/icons/restartTime.svg)"></i>Review</button>
+    <button class="navlink" data-view="quizzes"><i class="ic" style="--i:url(/icons/question.svg)"></i>Quizzes</button>
+    <button class="navlink" data-view="progress"><i class="ic" style="--i:url(/icons/progressBar.svg)"></i>Progress</button>
+    <button class="navlink" data-view="upload"><i class="ic" style="--i:url(/icons/upload.svg)"></i>Upload</button>
+    <button class="navlink" data-view="account"><i class="ic" style="--i:url(/icons/profile.svg)"></i>Account</button>
+    <div class="aside-sep"></div>
+    <button class="navlink signout-side" id="signoutSide"><i class="ic" style="--i:url(/icons/x.svg)"></i>Sign out</button>
+  </aside>
+
+  <main>
+    <div class="head-row">
+      <h1 id="viewTitle">Home</h1>
+      <p id="viewSub">Your study overview.</p>
+    </div>
+
+    <div class="cards" id="statCards">
+      <div class="card">
+        <div class="label"><i class="ic" style="width:14px;height:14px;--i:url(/icons/list.svg)"></i>Decks</div>
+        <div class="big" id="statDecks">0</div>
+        <div class="hint" id="statDecksHint">No decks yet</div>
+      </div>
+      <div class="card">
+        <div class="label"><i class="ic" style="width:14px;height:14px;--i:url(/icons/stopwatch.svg)"></i>Due today</div>
+        <div class="big">0</div>
+        <div class="hint">Nothing to review</div>
+      </div>
+      <div class="card">
+        <div class="label"><i class="ic" style="width:14px;height:14px;--i:url(/icons/flame.svg)"></i>Day streak</div>
+        <div class="big">0</div>
+        <div class="hint">Starts with your first review</div>
+      </div>
+    </div>
+
+    <!-- Generic empty-state panel, used by every view except Decks. -->
+    <div class="panel" id="genericPanel">
+      <div class="panel-head">
+        <i class="ic" id="panelIcon" style="--i:url(/icons/paper.svg)"></i>
+        <h2 id="panelTitle">Recent activity</h2>
+      </div>
+      <div class="state">
+        <span class="emoji" id="stateEmoji">🐙</span>
+        <h3 id="stateTitle">Nothing here yet</h3>
+        <p id="stateBody">Your decks and study history will appear here.</p>
+      </div>
+    </div>
+
+    <!-- Decks: the first live, backed-by-a-real-API view. -->
+    <div class="panel hidden" id="decksPanel">
+      <div class="panel-head">
+        <i class="ic" style="--i:url(/icons/list.svg)"></i>
+        <h2>Your decks</h2>
+        <button class="btn btn-primary" id="newDeckBtn" type="button" style="margin-left:auto">+ New deck</button>
+      </div>
+
+      <div class="deck-form hidden" id="deckForm">
+        <input id="deckTitle" type="text" maxlength="120" placeholder="Deck title — e.g. Biology 101" />
+        <input id="deckSubject" type="text" maxlength="60" placeholder="Subject (optional) — e.g. Cell biology" />
+        <div class="msg" id="deckMsg"></div>
+        <div class="row">
+          <button class="btn btn-primary" id="createDeckBtn" type="button">Create deck</button>
+          <button class="linkbtn" id="cancelDeckBtn" type="button">Cancel</button>
+        </div>
+      </div>
+
+      <div class="state" id="decksState">
+        <span class="emoji">🐙</span>
+        <h3>Loading…</h3>
+        <p>Fetching your decks.</p>
+      </div>
+      <div id="decksList"></div>
+    </div>
+
+    <!-- Deck detail: upload/generate material, list cards, launch review. -->
+    <div class="panel hidden" id="deckDetailPanel">
+      <div class="panel-head">
+        <button class="linkbtn" id="backToDecks" type="button">← Decks</button>
+        <h2 id="deckDetailTitle" style="margin-left:4px">Deck</h2>
+        <button class="btn btn-primary" id="reviewBtn" type="button" style="margin-left:auto" disabled>Review due (0)</button>
+      </div>
+
+      <div class="gen-form">
+        <textarea id="genText" rows="4" placeholder="Paste notes here — or choose a PDF / .txt / .md below — then let AI make flashcards."></textarea>
+        <div class="row">
+          <input type="file" id="genFile" accept=".pdf,.txt,.md,application/pdf,text/plain,text/markdown" />
+          <button class="btn btn-primary" id="genBtn" type="button">✨ Generate cards</button>
+        </div>
+        <div class="msg" id="genMsg"></div>
+        <div class="gen-summary hidden" id="genSummary"></div>
+
+        <div class="gen-preview hidden" id="genPreview">
+          <div class="prev-head">
+            <span id="prevCount"></span>
+            <div class="prev-actions">
+              <button class="linkbtn" id="discardBtn" type="button">Discard</button>
+              <button class="btn btn-primary" id="approveBtn" type="button">Add to deck</button>
+            </div>
+          </div>
+          <div id="prevList"></div>
+        </div>
+      </div>
+
+      <div class="state" id="cardsState">
+        <span class="emoji">🐙</span>
+        <h3>Loading…</h3>
+        <p>Fetching cards.</p>
+      </div>
+      <div id="cardsList"></div>
+    </div>
+  </main>
+
+  <!-- Review overlay: SM-2 flashcard session over the deck's due cards. -->
+  <div class="review-overlay hidden" id="reviewOverlay">
+    <div class="review-box">
+      <div class="review-top">
+        <span class="review-progress" id="reviewProgress"></span>
+        <button class="linkbtn" id="reviewClose" type="button">✕ Close</button>
+      </div>
+      <div class="review-card" id="reviewCard">
+        <div class="review-kicker">Question</div>
+        <div class="review-face" id="reviewFront"></div>
+        <div class="review-hint" id="reviewHint"></div>
+        <div class="review-answer hidden" id="reviewBack"></div>
+      </div>
+      <button class="btn btn-primary" id="revealBtn" type="button">Show answer</button>
+      <div class="grades hidden" id="gradeRow">
+        <button class="grade" type="button" data-grade="0">Again<small>&lt;1d</small></button>
+        <button class="grade" type="button" data-grade="3">Hard<small>soon</small></button>
+        <button class="grade" type="button" data-grade="4">Good<small>on track</small></button>
+        <button class="grade" type="button" data-grade="5">Easy<small>later</small></button>
+      </div>
+      <div class="review-done hidden" id="reviewDone">
+        <span style="font-size:36px;display:block;margin-bottom:10px">🎉</span>
+        <p>All caught up — nothing else due right now.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/vendor/supabase.js"></script>
+<script>
+(function(){
+  var $ = function(id){ return document.getElementById(id); };
+  var sb = null;          // supabase client, once configured
+  var mode = 'signin';    // 'signin' | 'signup'
+
+  // ── Theme ──
+  $('themeToggle').addEventListener('click', function(){
+    var r = document.documentElement;
+    var nextTheme = r.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    r.setAttribute('data-theme', nextTheme);
+    try { localStorage.setItem('theme', nextTheme); } catch(e){}
+  });
+  $('menuBtn').addEventListener('click', function(){
+    var open = $('sidebar').classList.toggle('open');
+    this.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+
+  // ── Views ──
+  function show(which){
+    ['bootView','authView','appView'].forEach(function(v){
+      $(v).classList.toggle('hidden', v !== which);
+    });
+    $('signoutTop').classList.toggle('hidden', which !== 'appView');
+  }
+
+  function setMsg(kind, html){
+    var m = $('authMsg');
+    m.className = 'msg' + (kind ? ' ' + kind : '');
+    m.innerHTML = html || '';
+    if (!kind) m.style.display = 'none';
+  }
+
+  function setMode(next){
+    mode = next;
+    var signup = mode === 'signup';
+    $('authTitle').textContent = signup ? 'Create your account' : 'Welcome back';
+    $('authSub').textContent = signup
+      ? 'Early access is open to people on the waitlist.'
+      : 'Sign in to your Krakenote account.';
+    $('authBtn').textContent = signup ? 'Create account' : 'Sign in';
+    $('switchText').textContent = signup ? 'Already have an account?' : 'New here?';
+    $('switchBtn').textContent = signup ? 'Sign in' : 'Create an account';
+    $('pw').setAttribute('autocomplete', signup ? 'new-password' : 'current-password');
+    $('fineprint').textContent = signup
+      ? 'You will need to be on the waitlist to register.'
+      : 'Accounts are limited to people on the waitlist while we are in early access.';
+    setMsg(null, '');
+  }
+
+  $('switchBtn').addEventListener('click', function(){
+    setMode(mode === 'signup' ? 'signin' : 'signup');
+  });
+
+  // ── Dashboard section copy. Everything is an honest empty state: there is no
+  // deck/card data anywhere yet, so there is nothing to fetch or fake. ──
+  var VIEWS = {
+    home:     { title:'Home',     sub:'Your study overview.',                    icon:'paper',       panel:'Recent activity', emoji:'🐙', h:'Nothing here yet',        b:'Once you start capturing notes, your recent decks and reviews will show up here.' },
+    decks:    { title:'Decks',    sub:'Every deck you have created.',            icon:'list',        panel:'Your decks',      emoji:'📚', h:'No decks yet',            b:'Decks you create in the Krakenote iOS app will sync here automatically.' },
+    review:   { title:'Review',   sub:'Spaced repetition, scheduled for you.',   icon:'restartTime', panel:'Due today',       emoji:'✅', h:'Nothing due',             b:'When you have cards, Krakenote surfaces each one right before you would forget it.' },
+    quizzes:  { title:'Quizzes',  sub:'Test yourself and track scores.',         icon:'question',    panel:'Quiz history',    emoji:'📝', h:'No quizzes taken',        b:'Quiz attempts and scores will be listed here once you take your first one.' },
+    progress: { title:'Progress', sub:'Retention and streaks over time.',        icon:'progressBar', panel:'Your progress',   emoji:'📈', h:'No data yet',             b:'Progress charts appear after your first few review sessions.' },
+    upload:   { title:'Upload',   sub:'Turn documents into study material.',     icon:'upload',      panel:'Upload',          emoji:'📄', h:'Uploads are coming soon', b:'Drag-and-drop PDF and document upload is planned for the v1 web companion.' },
+    account:  { title:'Account',  sub:'Your profile and subscription.',          icon:'profile',     panel:'Account',         emoji:'⚙️', h:'Nothing to manage yet',   b:'Subscription and profile settings arrive alongside the paid plan.' }
+  };
+
+  function renderView(key){
+    var v = VIEWS[key] || VIEWS.home;
+    $('viewTitle').textContent = v.title;
+    $('viewSub').textContent = v.sub;
+    $('panelTitle').textContent = v.panel;
+    $('panelIcon').style.setProperty('--i', 'url(/icons/' + v.icon + '.svg)');
+    $('stateEmoji').textContent = v.emoji;
+    $('stateTitle').textContent = v.h;
+    $('stateBody').textContent = v.b;
+    // Stat tiles are an overview concept — only meaningful on Home.
+    $('statCards').classList.toggle('hidden', key !== 'home');
+    // Decks is the one live view; everything else is still a generic empty state.
+    var isDecks = key === 'decks';
+    $('genericPanel').classList.toggle('hidden', isDecks);
+    $('decksPanel').classList.toggle('hidden', !isDecks);
+    $('deckDetailPanel').classList.add('hidden'); // always start on the deck list
+    if (isDecks) loadDecks();
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll('.navlink[data-view]'), function(btn){
+    btn.addEventListener('click', function(){
+      Array.prototype.forEach.call(document.querySelectorAll('.navlink[data-view]'), function(b){
+        b.classList.remove('active');
+      });
+      btn.classList.add('active');
+      renderView(btn.getAttribute('data-view'));
+      $('sidebar').classList.remove('open');
+    });
+  });
+
+  // ── Auth flow ──
+  function greet(user){
+    var email = (user && user.email) || '';
+    $('whoami').textContent = email ? 'Signed in as ' + email : '';
+  }
+
+  async function onSignedIn(session){
+    greet(session.user);
+    renderView('home');
+    show('appView');
+    loadDecks(); // populates the Home "Decks" stat even before the Decks view is opened
+  }
+
+  // ── Decks: talk to the RLS-protected API as the signed-in user ──
+  var decksCache = null;
+
+  async function accessToken(){
+    if (!sb) return '';
+    var s = await sb.auth.getSession();
+    return (s.data && s.data.session && s.data.session.access_token) || '';
+  }
+
+  async function api(path, opts){
+    opts = opts || {};
+    var t = await accessToken();
+    opts.headers = Object.assign(
+      { 'Content-Type':'application/json', 'Authorization':'Bearer ' + t },
+      opts.headers || {}
+    );
+    var res = await fetch(path, opts);
+    var data = await res.json().catch(function(){ return {}; });
+    return { res: res, data: data };
+  }
+
+  function setDecksState(emoji, title, body){
+    var s = $('decksState');
+    s.classList.remove('hidden');
+    s.innerHTML = '<span class="emoji"></span><h3></h3><p></p>';
+    s.querySelector('.emoji').textContent = emoji;
+    s.querySelector('h3').textContent = title;
+    s.querySelector('p').textContent = body;
+    $('decksList').innerHTML = '';
+  }
+
+  function updateHomeStat(){
+    if (!decksCache) return;
+    var n = decksCache.length;
+    $('statDecks').textContent = n;
+    $('statDecksHint').textContent = n ? (n === 1 ? '1 deck' : n + ' decks') : 'No decks yet';
+  }
+
+  async function loadDecks(){
+    setDecksState('🐙', 'Loading…', 'Fetching your decks.');
+    var out;
+    try { out = await api('/api/decks'); }
+    catch (ex){ setDecksState('⚠️', 'Network error', 'Could not reach the server. Retry in a moment.'); return; }
+    if (out.res.status === 401){ signOut(); return; }
+    if (!out.res.ok || !out.data.ok){
+      // Most likely cause pre-launch: the decks table has not been created yet.
+      setDecksState('🛠️', 'Almost there',
+        'The decks table is not set up on this database yet. Run supabase/decks.sql in the Supabase SQL editor, then refresh.');
+      return;
+    }
+    decksCache = out.data.decks || [];
+    renderDecks();
+    updateHomeStat();
+  }
+
+  function renderDecks(){
+    var list = $('decksList');
+    if (!decksCache || !decksCache.length){
+      setDecksState('📚', 'No decks yet', 'Create your first deck to start building study material.');
+      return;
+    }
+    $('decksState').classList.add('hidden');
+    list.innerHTML = '';
+    decksCache.forEach(function(d){
+      var row = document.createElement('div'); row.className = 'deck-row';
+      var main = document.createElement('div'); main.className = 'deck-main';
+      main.addEventListener('click', function(){ openDeck(d); });
+      var t = document.createElement('div'); t.className = 'deck-title'; t.textContent = d.title;
+      var meta = document.createElement('div'); meta.className = 'deck-meta';
+      var n = d.cardCount || 0;
+      meta.textContent = (d.subject ? d.subject + ' · ' : '') + n + ' card' + (n === 1 ? '' : 's');
+      main.appendChild(t); main.appendChild(meta);
+      var del = document.createElement('button'); del.className = 'linkbtn'; del.type = 'button'; del.textContent = 'Delete';
+      del.addEventListener('click', function(){ deleteDeck(d); });
+      row.appendChild(main); row.appendChild(del);
+      list.appendChild(row);
+    });
+  }
+
+  function showDeckForm(){ $('deckForm').classList.remove('hidden'); $('deckTitle').focus(); }
+  function hideDeckForm(){
+    $('deckForm').classList.add('hidden');
+    var m = $('deckMsg'); m.className = 'msg'; m.style.display = 'none';
+  }
+
+  async function createDeck(){
+    var title = ($('deckTitle').value || '').trim();
+    var subject = ($('deckSubject').value || '').trim();
+    var m = $('deckMsg');
+    if (!title){ m.className = 'msg err'; m.textContent = 'Please enter a deck title.'; return; }
+    var btn = $('createDeckBtn'); btn.disabled = true;
+    var out = await api('/api/decks', { method:'POST', body: JSON.stringify({ title: title, subject: subject }) });
+    btn.disabled = false;
+    if (out.res.status === 401){ signOut(); return; }
+    if (!out.res.ok || !out.data.ok){
+      m.className = 'msg err'; m.textContent = out.data.error || 'Could not create the deck.'; return;
+    }
+    $('deckTitle').value = ''; $('deckSubject').value = '';
+    hideDeckForm();
+    await loadDecks();
+  }
+
+  async function deleteDeck(d){
+    if (!window.confirm('Delete “' + d.title + '”? This removes the deck and its cards.')) return;
+    var out = await api('/api/decks/' + encodeURIComponent(d.id), { method:'DELETE' });
+    if (out.res.status === 401){ signOut(); return; }
+    if (!out.res.ok || !out.data.ok){ window.alert(out.data.error || 'Could not delete the deck.'); return; }
+    await loadDecks();
+  }
+
+  // ── Deck detail: upload/generate material, list cards, review ──
+  var currentDeck = null, cardsCache = [];
+
+  function msgOn(id, kind, html){
+    var m = $(id); m.className = 'msg' + (kind ? ' ' + kind : '');
+    m.innerHTML = html || ''; if (!kind) m.style.display = 'none';
+  }
+  function cardsState(emoji, title, body){
+    var s = $('cardsState'); s.classList.remove('hidden');
+    s.innerHTML = '<span class="emoji"></span><h3></h3><p></p>';
+    s.querySelector('.emoji').textContent = emoji;
+    s.querySelector('h3').textContent = title;
+    s.querySelector('p').textContent = body;
+    $('cardsList').innerHTML = '';
+  }
+
+  async function openDeck(d){
+    currentDeck = d;
+    $('decksPanel').classList.add('hidden');
+    $('genericPanel').classList.add('hidden');
+    $('deckDetailPanel').classList.remove('hidden');
+    $('deckDetailTitle').textContent = d.title;
+    $('genText').value = ''; $('genFile').value = '';
+    msgOn('genMsg', null, ''); $('genSummary').classList.add('hidden');
+    await loadCards();
+  }
+
+  function backToDeckList(){
+    $('deckDetailPanel').classList.add('hidden');
+    $('decksPanel').classList.remove('hidden');
+    loadDecks();
+  }
+
+  function dueCount(){
+    var now = Date.now();
+    return cardsCache.filter(function(c){ return new Date(c.due_at).getTime() <= now; }).length;
+  }
+
+  function renderCards(){
+    var n = dueCount();
+    var rb = $('reviewBtn');
+    rb.textContent = 'Review due (' + n + ')';
+    rb.disabled = n === 0;
+    var list = $('cardsList');
+    if (!cardsCache.length){
+      cardsState('🃏', 'No cards yet', 'Paste notes or a PDF above and generate your first flashcards.');
+      return;
+    }
+    $('cardsState').classList.add('hidden');
+    list.innerHTML = '';
+    cardsCache.forEach(function(c){
+      var row = document.createElement('div'); row.className = 'card-row';
+      var q = document.createElement('div'); q.className = 'q'; q.textContent = c.front;
+      var a = document.createElement('div'); a.className = 'a'; a.textContent = c.back;
+      row.appendChild(q); row.appendChild(a); list.appendChild(row);
+    });
+  }
+
+  async function loadCards(){
+    cardsState('🐙', 'Loading…', 'Fetching cards.');
+    var out = await api('/api/decks/' + encodeURIComponent(currentDeck.id) + '/cards');
+    if (out.res.status === 401){ signOut(); return; }
+    if (!out.res.ok || !out.data.ok){
+      cardsState('🛠️', 'Almost there', 'Run the latest supabase/decks.sql migration (it adds the cards + sources tables), then refresh.');
+      return;
+    }
+    cardsCache = out.data.cards || [];
+    renderCards();
+  }
+
+  function readFileB64(file){
+    return new Promise(function(resolve, reject){
+      var r = new FileReader();
+      r.onload = function(){ resolve(String(r.result).split(',')[1] || ''); };
+      r.onerror = reject; r.readAsDataURL(file);
+    });
+  }
+  function readFileText(file){
+    return new Promise(function(resolve, reject){
+      var r = new FileReader();
+      r.onload = function(){ resolve(String(r.result || '')); };
+      r.onerror = reject; r.readAsText(file);
+    });
+  }
+
+  // Generation returns PROPOSED cards; nothing is saved until the user approves.
+  var proposedSource = null;
+
+  async function generate(){
+    var text = ($('genText').value || '').trim();
+    var f = $('genFile').files && $('genFile').files[0];
+    if (!text && !f){ msgOn('genMsg', 'err', 'Paste some notes or choose a file first.'); return; }
+
+    var btn = $('genBtn'); btn.disabled = true;
+    $('genPreview').classList.add('hidden');
+    msgOn('genMsg', 'ok', 'Generating with AI — this can take several seconds…');
+    try {
+      var body = {};
+      if (f && (f.type === 'application/pdf' || /\.pdf$/i.test(f.name))){
+        body.file = { name: f.name, mediaType: 'application/pdf', dataBase64: await readFileB64(f) };
+      } else if (f){
+        var t = await readFileText(f);
+        body.text = (text ? text + '\n\n' : '') + t;
+      } else {
+        body.text = text;
+      }
+      var out = await api('/api/decks/' + encodeURIComponent(currentDeck.id) + '/generate',
+        { method:'POST', body: JSON.stringify(body) });
+      btn.disabled = false;
+      if (out.res.status === 401){ signOut(); return; }
+      if (!out.res.ok || !out.data.ok){ msgOn('genMsg', 'err', out.data.error || 'Generation failed.'); return; }
+
+      var cards = out.data.cards || [];
+      if (!cards.length){ msgOn('genMsg', 'err', 'The material was too thin to make cards from. Try adding more.'); return; }
+      msgOn('genMsg', null, '');
+      if (out.data.summary){
+        var s = $('genSummary'); s.classList.remove('hidden');
+        s.textContent = 'Summary — ' + out.data.summary;
+      }
+      proposedSource = out.data.source || {};
+      proposedSource.summary = out.data.summary || '';
+      renderPreview(cards);
+    } catch (ex){
+      btn.disabled = false;
+      msgOn('genMsg', 'err', 'Could not prepare the upload. Try a smaller file.');
+    }
+  }
+
+  function renderPreview(cards){
+    var list = $('prevList'); list.innerHTML = '';
+    cards.forEach(function(c){
+      var row = document.createElement('div'); row.className = 'prev-card';
+      row.setAttribute('data-type', c.type === 'cloze' ? 'cloze' : 'basic');
+      var top = document.createElement('div'); top.className = 'prev-toprow';
+      var tag = document.createElement('span'); tag.className = 'prev-type'; tag.textContent = c.type === 'cloze' ? 'cloze' : 'basic';
+      var rm = document.createElement('button'); rm.className = 'linkbtn'; rm.type = 'button'; rm.textContent = 'Remove';
+      rm.addEventListener('click', function(){ row.remove(); updatePrevCount(); });
+      top.appendChild(tag); top.appendChild(rm);
+      var front = document.createElement('textarea'); front.className = 'pf front'; front.rows = 2; front.value = c.front;
+      var back = document.createElement('textarea'); back.className = 'back'; back.rows = 2; back.value = c.back;
+      row.appendChild(top); row.appendChild(front); row.appendChild(back);
+      list.appendChild(row);
+    });
+    $('genPreview').classList.remove('hidden');
+    updatePrevCount();
+  }
+
+  function updatePrevCount(){
+    var n = $('prevList').querySelectorAll('.prev-card').length;
+    $('prevCount').textContent = n + ' proposed card' + (n === 1 ? '' : 's') + ' — edit or remove, then add.';
+    $('approveBtn').disabled = n === 0;
+  }
+
+  function discardPreview(){
+    $('genPreview').classList.add('hidden');
+    $('prevList').innerHTML = '';
+    $('genSummary').classList.add('hidden');
+    proposedSource = null;
+  }
+
+  async function approvePreview(){
+    var rows = $('prevList').querySelectorAll('.prev-card');
+    var cards = [];
+    Array.prototype.forEach.call(rows, function(row){
+      var front = (row.querySelector('.front').value || '').trim();
+      var back = (row.querySelector('.back').value || '').trim();
+      if (front && back){ cards.push({ type: row.getAttribute('data-type'), front: front, back: back }); }
+    });
+    if (!cards.length){ msgOn('genMsg', 'err', 'Nothing to add — every card was emptied or removed.'); return; }
+
+    var btn = $('approveBtn'); btn.disabled = true;
+    var out = await api('/api/decks/' + encodeURIComponent(currentDeck.id) + '/cards',
+      { method:'POST', body: JSON.stringify({ cards: cards, source: proposedSource }) });
+    btn.disabled = false;
+    if (out.res.status === 401){ signOut(); return; }
+    if (!out.res.ok || !out.data.ok){ msgOn('genMsg', 'err', out.data.error || 'Could not add the cards.'); return; }
+
+    msgOn('genMsg', 'ok', 'Added ' + out.data.added + ' card' + (out.data.added === 1 ? '' : 's') + ' to the deck.');
+    $('genText').value = ''; $('genFile').value = '';
+    discardPreview();
+    await loadCards();
+  }
+
+  // ── Review (SM-2) ──
+  var reviewQueue = [], reviewIdx = 0;
+
+  function showReviewCard(){
+    if (reviewIdx >= reviewQueue.length){
+      $('reviewCard').classList.add('hidden');
+      $('revealBtn').classList.add('hidden');
+      $('gradeRow').classList.add('hidden');
+      $('reviewProgress').textContent = '';
+      $('reviewDone').classList.remove('hidden');
+      return;
+    }
+    var c = reviewQueue[reviewIdx];
+    $('reviewDone').classList.add('hidden');
+    $('reviewCard').classList.remove('hidden');
+    $('reviewFront').textContent = c.front;
+    $('reviewHint').textContent = c.hint || '';
+    $('reviewBack').textContent = c.back;
+    $('reviewBack').classList.add('hidden');
+    $('revealBtn').classList.remove('hidden');
+    $('gradeRow').classList.add('hidden');
+    $('reviewProgress').textContent = (reviewIdx + 1) + ' / ' + reviewQueue.length;
+  }
+
+  function startReview(){
+    var now = Date.now();
+    reviewQueue = cardsCache.filter(function(c){ return new Date(c.due_at).getTime() <= now; });
+    reviewIdx = 0;
+    $('reviewOverlay').classList.remove('hidden');
+    showReviewCard();
+  }
+
+  function closeReview(){
+    $('reviewOverlay').classList.add('hidden');
+    loadCards(); // refresh due counts after grading
+  }
+
+  async function gradeCard(grade){
+    var c = reviewQueue[reviewIdx];
+    var out = await api('/api/cards/' + encodeURIComponent(c.id) + '/review',
+      { method:'POST', body: JSON.stringify({ grade: grade }) });
+    if (out.res.ok && out.data.ok){ c.due_at = out.data.due_at; }
+    reviewIdx += 1;
+    showReviewCard();
+  }
+
+  async function signOut(){
+    try { if (sb) await sb.auth.signOut(); } catch(e){}
+    setMode('signin');
+    $('pw').value = '';
+    show('authView');
+    setMsg('ok', 'You have been signed out.');
+  }
+  $('signoutTop').addEventListener('click', signOut);
+  $('signoutSide').addEventListener('click', signOut);
+  $('newDeckBtn').addEventListener('click', showDeckForm);
+  $('cancelDeckBtn').addEventListener('click', hideDeckForm);
+  $('createDeckBtn').addEventListener('click', createDeck);
+  $('backToDecks').addEventListener('click', backToDeckList);
+  $('genBtn').addEventListener('click', generate);
+  $('approveBtn').addEventListener('click', approvePreview);
+  $('discardBtn').addEventListener('click', discardPreview);
+  $('reviewBtn').addEventListener('click', startReview);
+  $('reviewClose').addEventListener('click', closeReview);
+  $('revealBtn').addEventListener('click', function(){
+    $('reviewBack').classList.remove('hidden');
+    $('revealBtn').classList.add('hidden');
+    $('gradeRow').classList.remove('hidden');
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('#gradeRow .grade'), function(b){
+    b.addEventListener('click', function(){ gradeCard(parseInt(b.getAttribute('data-grade'), 10)); });
+  });
+
+  $('authForm').addEventListener('submit', async function(e){
+    e.preventDefault();
+    if (!sb) return;
+    var email = ($('em').value || '').trim().toLowerCase();
+    var pw = $('pw').value || '';
+    if (!email || !pw){ setMsg('err', 'Email and password are both required.'); return; }
+
+    var btn = $('authBtn');
+    btn.disabled = true;
+    setMsg(null, '');
+
+    try {
+      if (mode === 'signup'){
+        // Server-side because the waitlist gate must not be skippable.
+        var res = await fetch('/api/auth/signup', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ email: email, password: pw })
+        });
+        var data = await res.json().catch(function(){ return {}; });
+        if (!res.ok || !data.ok){
+          if (data.error === 'not_on_waitlist'){
+            setMsg('err', 'That email is not on the waitlist yet. <a href="/#waitlist">Join the waitlist</a> and we will open your account.');
+          } else {
+            setMsg('err', data.error || 'Could not create your account.');
+          }
+          btn.disabled = false;
+          return;
+        }
+        // Account exists now — sign straight in so there is no second step.
+      }
+
+      var out = await sb.auth.signInWithPassword({ email: email, password: pw });
+      if (out.error || !out.data || !out.data.session){
+        setMsg('err', mode === 'signup'
+          ? 'Your account was created, but sign-in failed. Try signing in.'
+          : 'Invalid email or password.');
+        if (mode === 'signup') setMode('signin');
+        btn.disabled = false;
+        return;
+      }
+      $('pw').value = '';
+      btn.disabled = false;
+      onSignedIn(out.data.session);
+    } catch (ex){
+      btn.disabled = false;
+      setMsg('err', 'Could not reach the server. Check your connection and try again.');
+    }
+  });
+
+  // ── Boot ──
+  (async function boot(){
+    var cfg;
+    try {
+      var r = await fetch('/api/config', { cache:'no-store' });
+      cfg = await r.json().catch(function(){ return {}; });
+      if (!r.ok || !cfg.ok) throw new Error(cfg.error || 'not configured');
+    } catch (ex){
+      show('authView');
+      $('authForm').classList.add('hidden');
+      document.querySelector('.switch').classList.add('hidden');
+      $('authTitle').textContent = 'Accounts are not set up yet';
+      $('authSub').textContent = '';
+      setMsg('err', 'This server has no Supabase credentials configured, so sign-in is unavailable. If you are running locally, set SUPABASE_URL and SUPABASE_ANON_KEY.');
+      return;
+    }
+
+    sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey, {
+      auth: { persistSession: true, autoRefreshToken: true }
+    });
+
+    var sess = await sb.auth.getSession();
+    if (sess.data && sess.data.session){
+      onSignedIn(sess.data.session);
+    } else {
+      setMode('signin');
+      show('authView');
+    }
+
+    // Keep the UI in step with token refresh / sign-out in another tab.
+    sb.auth.onAuthStateChange(function(event, session){
+      if (event === 'SIGNED_OUT' || !session){
+        if (!$('authView').classList.contains('hidden')) return;
+        show('authView');
+      }
+    });
+  })();
+})();
+</script>
+</body>
+</html>

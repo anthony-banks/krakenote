@@ -22,7 +22,7 @@ Krakenote is an AI-first study app — **iOS (SwiftUI)** + **companion web app**
 |------|------|
 | `site/` | Marketing landing page + legal/support pages (static HTML) |
 | `server/` | Express server: serves `site/` + `POST /api/waitlist` → Supabase |
-| `supabase/schema.sql` | Waitlist table schema |
+| `supabase/migrations/` | Postgres schema as versioned migrations — apply with `supabase db push` (never paste SQL by hand) |
 | `docs/PRD.md` | Product requirements (source of truth) |
 
 ## Infrastructure
@@ -30,7 +30,7 @@ Krakenote is an AI-first study app — **iOS (SwiftUI)** + **companion web app**
 - **Hosting:** Railway, project `krakenote` (workspace: *anthony-banks's Projects*). Auto-deploys from GitHub.
   - **production** env ← `main` branch → `krakenote-production.up.railway.app` + `www.krakenote.com`
   - **staging** env → `krakenote-staging.up.railway.app`
-- **Database:** Supabase — **separate projects** for prod and staging (test data never touches prod).
+- **Database:** Supabase — **separate projects** for prod and staging (test data never touches prod). Schema lives in `supabase/migrations/` (Supabase CLI). Change flow: add a migration with `supabase migration new <name>`, then `supabase db push` (after a one-time `supabase login` + `supabase link --project-ref <ref>`). Never hand-paste SQL in the dashboard.
 - **Secrets:** `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` live only as Railway env vars, never committed. The service/secret key bypasses RLS and must never reach the browser.
 - **Domain:** `krakenote.com` at GoDaddy → CNAME `www` → Railway; apex 301-forwards to `www`.
 
@@ -45,5 +45,28 @@ Local dev needs `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` in a `.env` (see `.
 
 ## Workflow
 
-- Commit to `main` deploys **production**. Use the `staging` branch / staging env to test first once branch-based staging deploys are enabled.
 - Keep `docs/PRD.md` as the living product record — capture shaping ideas there.
+
+## Deploying — the only supported way
+
+Both environments deploy from a branch. **This is the whole procedure — do not use
+`railway up`, `railway redeploy`, or one-off uploads. They create detached builds
+that the next branch push or variable change silently wipes.**
+
+| To deploy… | Do this |
+|---|---|
+| **staging** | `git push origin staging` (merge your branch into `staging` first) |
+| **production** | merge to `main` (PR); the push to `main` deploys prod |
+
+That's it — deploying is a git push, nothing more. To preview a feature branch on
+staging: `git switch staging && git merge <branch> && git push origin staging`.
+
+**One-time setup this depends on:** the Railway *staging* service must have its
+deploy source set to the **`staging` branch** (Railway → krakenote → staging env →
+service → Settings → Source). If staging suddenly serves `main`'s code, that setting
+was reset — fix it there, don't reach for `railway up`.
+
+Setting a Railway env var triggers a redeploy **of the connected branch** — so set
+vars first, then push, and the var is present for the build. Env vars are never in
+git; they live only as Railway service variables per environment (prod and staging
+have separate Supabase projects, so use each one's own keys).

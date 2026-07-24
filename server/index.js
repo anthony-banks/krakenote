@@ -1,6 +1,8 @@
 import express from 'express';
 import { createClient } from '@supabase/supabase-js';
 import Anthropic from '@anthropic-ai/sdk';
+import mammoth from 'mammoth';
+import { parseOffice } from 'officeparser';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -302,6 +304,86 @@ const CARD_SCHEMA = {
   required: ['summary', 'cards'],
 };
 
+// ── Ingestion: turn whatever was submitted into Claude message content ───────
+// Supports pasted text, a URL, PDF (document block), image (vision), and
+// docx/pptx (parsed server-side to text). Throws a user-facing message on bad input.
+const IMG_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
+const DOCX_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+const PPTX_TYPE = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+const GEN_PROMPT = 'Generate study flashcards and a summary from this material.';
+
+async function fetchArticle(rawUrl) {
+  let u;
+  try { u = new URL(rawUrl); } catch { throw new Error('That does not look like a valid URL.'); }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new Error('Only http(s) links are supported.');
+  let resp;
+  try {
+    resp = await fetch(u.href, { headers: { 'User-Agent': 'KrakenoteBot/1.0' }, signal: AbortSignal.timeout(15000) });
+  } catch { throw new Error('Could not reach that link.'); }
+  if (!resp.ok) throw new Error('Could not fetch that link (HTTP ' + resp.status + ').');
+  const html = (await resp.text()).slice(0, 3_000_000);
+  // Crude readability: drop scripts/styles, strip tags, decode common entities.
+  const text = html
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>').replace(/&#39;/g, "'").replace(/&quot;/g, '"')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (text.length < 200) throw new Error('Could not extract readable text from that page.');
+  return text;
+}
+
+async function buildIngest(body) {
+  const file = body.file;
+  const text = typeof body.text === 'string' ? body.text : '';
+  const url = typeof body.url === 'string' ? body.url.trim() : '';
+
+  const asText = (raw, kind, filename) => {
+    const clean = (raw || '').slice(0, 60000).trim();
+    if (!clean) throw new Error('There was nothing to generate from.');
+    return { userContent: [{ type: 'text', text: 'Study material:\n\n' + clean }], sourceKind: kind, filename, charCount: clean.length };
+  };
+
+  if (file && file.dataBase64) {
+    const mt = file.mediaType || '';
+    const name = typeof file.name === 'string' ? file.name.slice(0, 200) : null;
+    if (mt === 'application/pdf') {
+      return {
+        userContent: [
+          { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: file.dataBase64 } },
+          { type: 'text', text: GEN_PROMPT },
+        ],
+        sourceKind: 'pdf', filename: name || 'document.pdf', charCount: 0,
+      };
+    }
+    if (IMG_TYPES.has(mt)) {
+      return {
+        userContent: [
+          { type: 'image', source: { type: 'base64', media_type: mt, data: file.dataBase64 } },
+          { type: 'text', text: GEN_PROMPT + ' Read any text visible in the image.' },
+        ],
+        sourceKind: 'image', filename: name || 'image', charCount: 0,
+      };
+    }
+    const buf = Buffer.from(file.dataBase64, 'base64');
+    if (mt === DOCX_TYPE || /\.docx$/i.test(name || '')) {
+      const { value } = await mammoth.extractRawText({ buffer: buf });
+      return asText(value, 'docx', name);
+    }
+    if (mt === PPTX_TYPE || /\.pptx$/i.test(name || '')) {
+      const value = await parseOffice(buf);
+      return asText(value, 'pptx', name);
+    }
+    throw new Error('Unsupported file type. Use PDF, image, .docx, .pptx, .txt, or .md.');
+  }
+
+  if (url) return asText(await fetchArticle(url), 'url', url);
+  if (text) return asText(text, 'text', null);
+  throw new Error('Provide notes, a link, or a file to generate from.');
+}
+
 // Strict grounding: cards come ONLY from the supplied material. Two card kinds.
 const GEN_SYSTEM =
   "You are Krakenote's study-material generator. Use ONLY facts explicitly present in the provided " +
@@ -323,31 +405,11 @@ app.post('/api/decks/:id/generate', requireUser, async (req, res) => {
   const { data: deck, error: deckErr } = await req.db.from('decks').select('id').eq('id', deckId).maybeSingle();
   if (deckErr || !deck) return res.status(404).json({ ok: false, error: 'Deck not found.' });
 
-  const file = req.body?.file;
-  const text = typeof req.body?.text === 'string' ? req.body.text : '';
-
-  let userContent;
-  let sourceKind;
-  let filename = null;
-  let extractedText = null;
-  let charCount = 0;
-
-  if (file && file.dataBase64 && file.mediaType === 'application/pdf') {
-    // PDFs go straight to the model as a document block — no server-side parsing.
-    userContent = [
-      { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: file.dataBase64 } },
-      { type: 'text', text: 'Generate study flashcards and a summary from this document.' },
-    ];
-    sourceKind = 'pdf';
-    filename = typeof file.name === 'string' ? file.name.slice(0, 200) : 'document.pdf';
-  } else {
-    const clean = (text || '').slice(0, 60000).trim(); // bound cost/latency
-    if (!clean) return res.status(400).json({ ok: false, error: 'Provide some notes or a PDF to generate from.' });
-    userContent = [{ type: 'text', text: 'Study material:\n\n' + clean }];
-    sourceKind = file ? 'file' : 'text';
-    filename = file && typeof file.name === 'string' ? file.name.slice(0, 200) : null;
-    extractedText = clean;
-    charCount = clean.length;
+  let userContent, sourceKind, filename, charCount;
+  try {
+    ({ userContent, sourceKind, filename, charCount } = await buildIngest(req.body || {}));
+  } catch (ex) {
+    return res.status(400).json({ ok: false, error: ex.message || 'Could not read that input.' });
   }
 
   let result;
@@ -454,7 +516,7 @@ app.post('/api/cards/:id/review', requireUser, async (req, res) => {
   }
   const { data: card, error } = await req.db
     .from('cards')
-    .select('id, ease, interval_days, repetitions')
+    .select('id, deck_id, ease, interval_days, repetitions')
     .eq('id', req.params.id)
     .maybeSingle();
   if (error || !card) return res.status(404).json({ ok: false, error: 'Card not found.' });
@@ -484,7 +546,74 @@ app.post('/api/cards/:id/review', requireUser, async (req, res) => {
     console.error('[review] update failed:', upErr.message);
     return res.status(500).json({ ok: false, error: 'Could not save the review.' });
   }
+  // Log the review for streaks / progress (best-effort — never fail the review on this).
+  await req.db.from('reviews').insert({ user_id: req.user.id, card_id: card.id, deck_id: card.deck_id, grade })
+    .then(({ error: e }) => { if (e) console.error('[review] log failed:', e.message); });
+
   return res.json({ ok: true, interval_days: interval, due_at: dueAt });
+});
+
+// Global review queue: every due card across all of the caller's decks.
+app.get('/api/review/due', requireUser, async (req, res) => {
+  const nowIso = new Date().toISOString();
+  const { data, error } = await req.db
+    .from('cards')
+    .select('id, card_type, front, back, hint, due_at, decks!inner(title)')
+    .lte('due_at', nowIso)
+    .order('due_at', { ascending: true })
+    .limit(300);
+  if (error) {
+    console.error('[review] due query failed:', error.message);
+    return res.status(500).json({ ok: false, error: 'Could not load due cards.' });
+  }
+  const cards = (data || []).map((c) => ({
+    id: c.id, card_type: c.card_type, front: c.front, back: c.back, hint: c.hint,
+    deckTitle: (c.decks && c.decks.title) || '',
+  }));
+  return res.json({ ok: true, cards });
+});
+
+// Dashboard + Progress numbers (all real — no fabricated values).
+app.get('/api/stats', requireUser, async (req, res) => {
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const dayStr = (d) => d.toISOString().slice(0, 10);
+
+  const [decks, cards, due] = await Promise.all([
+    req.db.from('decks').select('id', { count: 'exact', head: true }),
+    req.db.from('cards').select('id', { count: 'exact', head: true }),
+    req.db.from('cards').select('id', { count: 'exact', head: true }).lte('due_at', nowIso),
+  ]);
+  const { data: revs, error: revErr } = await req.db
+    .from('reviews').select('grade, reviewed_at').order('reviewed_at', { ascending: false }).limit(3000);
+  if (revErr) console.error('[stats] reviews query failed:', revErr.message);
+
+  const rows = revs || [];
+  const days = new Set(rows.map((r) => r.reviewed_at.slice(0, 10)));
+  // Streak: consecutive days with a review, ending today (or yesterday as grace).
+  let streak = 0;
+  const cur = new Date(now);
+  if (!days.has(dayStr(cur))) cur.setUTCDate(cur.getUTCDate() - 1);
+  while (days.has(dayStr(cur))) { streak++; cur.setUTCDate(cur.getUTCDate() - 1); }
+
+  const today = dayStr(now);
+  const weekAgo = new Date(now.getTime() - 7 * 86400000).toISOString();
+  const reviewedToday = rows.filter((r) => r.reviewed_at.slice(0, 10) === today).length;
+  const reviewed7d = rows.filter((r) => r.reviewed_at >= weekAgo).length;
+  const good = rows.filter((r) => r.grade >= 4).length;
+  const retentionPct = rows.length ? Math.round((good / rows.length) * 100) : null;
+
+  return res.json({
+    ok: true,
+    decks: decks.count || 0,
+    cards: cards.count || 0,
+    due: due.count || 0,
+    streak,
+    reviewedToday,
+    reviewed7d,
+    totalReviews: rows.length,
+    retentionPct,
+  });
 });
 
 // ── Admin dashboard (Supabase Auth, superuser-gated, READ-ONLY) ─────────────

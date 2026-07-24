@@ -177,6 +177,54 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   .grade small{display:block;font-weight:500;font-size:11px;color:var(--muted);margin-top:2px}
   .grade[data-grade="0"]:hover{border-color:var(--danger)}
   .review-done{text-align:center;color:var(--muted);font-size:15px}
+  .review-deck{font-family:var(--head);font-weight:600;font-size:12px;color:var(--accent);margin-left:auto;margin-right:12px;max-width:40%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  /* Home quick actions */
+  .quick-actions{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:18px 22px}
+  @media(max-width:560px){.quick-actions{grid-template-columns:1fr}}
+  .quick-btn{display:flex;align-items:center;gap:14px;text-align:left;background:var(--surface-2);border:1px solid var(--border);border-radius:14px;padding:16px;cursor:pointer;color:var(--text);transition:transform .12s ease,border-color .12s ease}
+  .quick-btn:hover{transform:translateY(-2px);border-color:var(--accent)}
+  .quick-btn .ic{width:24px;height:24px;color:var(--accent)}
+  .quick-btn span{display:flex;flex-direction:column}
+  .quick-btn b{font-family:var(--head);font-size:15px}
+  .quick-btn small{color:var(--muted);font-size:12.5px}
+
+  /* Pick-a-deck bodies (quiz, upload) */
+  .pick-body{padding:18px 22px}
+  .pick-hint{color:var(--muted);font-size:14px;margin-bottom:14px}
+  .pick-deck{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:10px;cursor:pointer;color:var(--text)}
+  .pick-deck:hover{border-color:var(--accent)}
+  .pick-deck .pd-title{font-family:var(--head);font-weight:700;font-size:15px}
+  .pick-deck .pd-meta{font-size:13px;color:var(--muted);margin-left:auto}
+
+  /* Progress */
+  .prog-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;padding:18px 22px}
+  .prog-tile{background:var(--surface-2);border:1px solid var(--border);border-radius:14px;padding:18px}
+  .prog-num{font-family:var(--head);font-weight:800;font-size:32px;line-height:1;letter-spacing:-1px;color:var(--text)}
+  .prog-lbl{font-size:13px;color:var(--muted);margin-top:8px}
+
+  /* Account */
+  .acct-body{padding:20px 22px;max-width:440px}
+  .acct-row{display:flex;justify-content:space-between;gap:12px;font-size:14px}
+  .acct-label{color:var(--muted)}
+  .acct-sep{height:1px;background:var(--border);margin:18px 0}
+  .acct-h{font-family:var(--head);font-weight:700;font-size:15px;margin-bottom:10px}
+  .acct-body input{width:100%;font-family:var(--body);font-size:15px;padding:12px 14px;border-radius:12px;border:1.5px solid var(--border);background:var(--surface-2);color:var(--text);outline:none;margin-bottom:12px}
+  .acct-body input:focus{border-color:var(--accent)}
+
+  /* Capture extras */
+  .gen-url{font-family:var(--body);font-size:15px;padding:12px 14px;border-radius:12px;border:1.5px solid var(--border);background:var(--surface-2);color:var(--text);outline:none}
+  .gen-url:focus{border-color:var(--accent)}
+  .drop-hint{font-size:12.5px;color:var(--muted)}
+  .gen-form.dragover{outline:2px dashed var(--accent);outline-offset:4px;border-radius:14px}
+
+  /* Quiz */
+  .quiz-options{display:flex;flex-direction:column;gap:10px;margin-top:16px}
+  .quiz-opt{font-family:var(--body);font-size:15px;text-align:left;padding:14px 16px;border-radius:12px;border:1.5px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;transition:border-color .12s ease}
+  .quiz-opt:hover:not(:disabled){border-color:var(--accent)}
+  .quiz-opt:disabled{cursor:default}
+  .quiz-opt.correct{border-color:#3fbf7f;background:color-mix(in srgb,#3fbf7f 16%,transparent)}
+  .quiz-opt.wrong{border-color:var(--danger);background:color-mix(in srgb,var(--danger) 14%,transparent)}
 
   .boot{padding:70px 24px;text-align:center;color:var(--muted)}
 
@@ -273,26 +321,84 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       </div>
       <div class="card">
         <div class="label"><i class="ic" style="width:14px;height:14px;--i:url(/icons/stopwatch.svg)"></i>Due today</div>
-        <div class="big">0</div>
-        <div class="hint">Nothing to review</div>
+        <div class="big" id="statDue">0</div>
+        <div class="hint" id="statDueHint">Nothing to review</div>
       </div>
       <div class="card">
         <div class="label"><i class="ic" style="width:14px;height:14px;--i:url(/icons/flame.svg)"></i>Day streak</div>
-        <div class="big">0</div>
-        <div class="hint">Starts with your first review</div>
+        <div class="big" id="statStreak">0</div>
+        <div class="hint" id="statStreakHint">Starts with your first review</div>
       </div>
     </div>
 
-    <!-- Generic empty-state panel, used by every view except Decks. -->
-    <div class="panel" id="genericPanel">
-      <div class="panel-head">
-        <i class="ic" id="panelIcon" style="--i:url(/icons/paper.svg)"></i>
-        <h2 id="panelTitle">Recent activity</h2>
+    <!-- HOME: quick actions -->
+    <div class="panel view-panel" id="homePanel">
+      <div class="panel-head"><i class="ic" style="--i:url(/icons/paper.svg)"></i><h2>Quick actions</h2></div>
+      <div class="quick-actions">
+        <button class="quick-btn" data-go="upload"><i class="ic" style="--i:url(/icons/upload.svg)"></i><span><b>Add material</b><small>Paste, drop a file, or a link → cards</small></span></button>
+        <button class="quick-btn" data-go="review"><i class="ic" style="--i:url(/icons/restartTime.svg)"></i><span><b>Review due</b><small>Study what's scheduled today</small></span></button>
+        <button class="quick-btn" data-go="decks"><i class="ic" style="--i:url(/icons/list.svg)"></i><span><b>Your decks</b><small>Browse and manage decks</small></span></button>
+        <button class="quick-btn" data-go="quizzes"><i class="ic" style="--i:url(/icons/question.svg)"></i><span><b>Take a quiz</b><small>Test yourself, get a score</small></span></button>
       </div>
+    </div>
+
+    <!-- REVIEW: global launcher over all due cards -->
+    <div class="panel view-panel hidden" id="reviewPanel">
+      <div class="panel-head"><i class="ic" style="--i:url(/icons/restartTime.svg)"></i><h2>Review</h2></div>
       <div class="state">
-        <span class="emoji" id="stateEmoji">🐙</span>
-        <h3 id="stateTitle">Nothing here yet</h3>
-        <p id="stateBody">Your decks and study history will appear here.</p>
+        <span class="emoji" id="reviewLaunchEmoji">🔁</span>
+        <h3 id="reviewLaunchTitle">Loading…</h3>
+        <p id="reviewLaunchBody">Checking what's due across your decks.</p>
+        <div style="margin-top:18px"><button class="btn btn-primary hidden" id="startGlobalReviewBtn" type="button">Start review</button></div>
+      </div>
+    </div>
+
+    <!-- QUIZZES: pick a deck to quiz -->
+    <div class="panel view-panel hidden" id="quizPanel">
+      <div class="panel-head"><i class="ic" style="--i:url(/icons/question.svg)"></i><h2>Quizzes</h2></div>
+      <div class="pick-body">
+        <p class="pick-hint">Pick a deck to quiz yourself — multiple choice, scored. This is a self-test; it doesn't change your review schedule.</p>
+        <div class="state" id="quizState"><span class="emoji">🐙</span><h3>Loading…</h3><p>Fetching your decks.</p></div>
+        <div id="quizDeckList"></div>
+      </div>
+    </div>
+
+    <!-- PROGRESS: real stats -->
+    <div class="panel view-panel hidden" id="progressPanel">
+      <div class="panel-head"><i class="ic" style="--i:url(/icons/progressBar.svg)"></i><h2>Progress</h2></div>
+      <div class="prog-grid" id="progGrid">
+        <div class="prog-tile"><div class="prog-num" id="pgStreak">—</div><div class="prog-lbl">Day streak</div></div>
+        <div class="prog-tile"><div class="prog-num" id="pgToday">—</div><div class="prog-lbl">Reviewed today</div></div>
+        <div class="prog-tile"><div class="prog-num" id="pgWeek">—</div><div class="prog-lbl">Reviewed this week</div></div>
+        <div class="prog-tile"><div class="prog-num" id="pgRetention">—</div><div class="prog-lbl">Retention</div></div>
+        <div class="prog-tile"><div class="prog-num" id="pgCards">—</div><div class="prog-lbl">Total cards</div></div>
+        <div class="prog-tile"><div class="prog-num" id="pgReviews">—</div><div class="prog-lbl">Total reviews</div></div>
+      </div>
+    </div>
+
+    <!-- UPLOAD: pick a deck to add material to -->
+    <div class="panel view-panel hidden" id="uploadPanel">
+      <div class="panel-head"><i class="ic" style="--i:url(/icons/upload.svg)"></i><h2>Upload &amp; capture</h2></div>
+      <div class="pick-body">
+        <p class="pick-hint">Choose a deck to add material to — you can paste text, drop a file or image, or paste a link, then generate cards.</p>
+        <button class="btn btn-primary" id="uploadNewDeckBtn" type="button" style="margin-bottom:14px">+ New deck</button>
+        <div class="state" id="uploadState"><span class="emoji">🐙</span><h3>Loading…</h3><p>Fetching your decks.</p></div>
+        <div id="uploadDeckList"></div>
+      </div>
+    </div>
+
+    <!-- ACCOUNT -->
+    <div class="panel view-panel hidden" id="accountPanel">
+      <div class="panel-head"><i class="ic" style="--i:url(/icons/profile.svg)"></i><h2>Account</h2></div>
+      <div class="acct-body">
+        <div class="acct-row"><span class="acct-label">Signed in as</span><span id="acctEmail">—</span></div>
+        <div class="acct-sep"></div>
+        <h3 class="acct-h">Change password</h3>
+        <input type="password" id="acctPw" placeholder="New password — at least 8 characters" autocomplete="new-password" />
+        <div class="msg" id="acctMsg"></div>
+        <button class="btn btn-primary" id="acctPwBtn" type="button">Update password</button>
+        <div class="acct-sep"></div>
+        <button class="linkbtn" id="acctSignout" type="button">Sign out</button>
       </div>
     </div>
 
@@ -330,12 +436,14 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
         <button class="btn btn-primary" id="reviewBtn" type="button" style="margin-left:auto" disabled>Review due (0)</button>
       </div>
 
-      <div class="gen-form">
-        <textarea id="genText" rows="4" placeholder="Paste notes here — or choose a PDF / .txt / .md below — then let AI make flashcards."></textarea>
+      <div class="gen-form" id="genForm">
+        <textarea id="genText" rows="4" placeholder="Paste notes here — or drop a file/image, or paste a link below — then let AI make flashcards."></textarea>
+        <input type="url" id="genUrl" class="gen-url" placeholder="…or paste an article URL (https://…)" />
         <div class="row">
-          <input type="file" id="genFile" accept=".pdf,.txt,.md,application/pdf,text/plain,text/markdown" />
+          <input type="file" id="genFile" accept=".pdf,.txt,.md,.docx,.pptx,image/*,application/pdf,text/plain,text/markdown" />
           <button class="btn btn-primary" id="genBtn" type="button">✨ Generate cards</button>
         </div>
+        <div class="drop-hint" id="dropHint">Tip: drag a PDF, image, .docx, or .pptx onto this box.</div>
         <div class="msg" id="genMsg"></div>
         <div class="gen-summary hidden" id="genSummary"></div>
 
@@ -365,6 +473,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     <div class="review-box">
       <div class="review-top">
         <span class="review-progress" id="reviewProgress"></span>
+        <span class="review-deck" id="reviewDeck"></span>
         <button class="linkbtn" id="reviewClose" type="button">✕ Close</button>
       </div>
       <div class="review-card" id="reviewCard">
@@ -383,6 +492,30 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       <div class="review-done hidden" id="reviewDone">
         <span style="font-size:36px;display:block;margin-bottom:10px">🎉</span>
         <p>All caught up — nothing else due right now.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quiz overlay: multiple-choice self-test over a deck's cards. -->
+  <div class="review-overlay hidden" id="quizOverlay">
+    <div class="review-box">
+      <div class="review-top">
+        <span class="review-progress" id="quizProgress"></span>
+        <span class="review-deck" id="quizDeckName"></span>
+        <button class="linkbtn" id="quizClose" type="button">✕ Close</button>
+      </div>
+      <div id="quizQuestionWrap">
+        <div class="review-kicker">Question</div>
+        <div class="review-face" id="quizQuestion"></div>
+        <div class="quiz-options" id="quizOptions"></div>
+      </div>
+      <div class="review-done hidden" id="quizDone">
+        <span style="font-size:36px;display:block;margin-bottom:10px" id="quizDoneEmoji">🎉</span>
+        <h3 id="quizScore" style="font-family:var(--head);font-size:24px;margin-bottom:8px"></h3>
+        <p id="quizScoreBody"></p>
+        <div class="row" style="justify-content:center;margin-top:16px">
+          <button class="btn btn-primary" id="quizRetry" type="button">Try again</button>
+        </div>
       </div>
     </div>
   </div>
@@ -455,23 +588,36 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     account:  { title:'Account',  sub:'Your profile and subscription.',          icon:'profile',     panel:'Account',         emoji:'⚙️', h:'Nothing to manage yet',   b:'Subscription and profile settings arrive alongside the paid plan.' }
   };
 
+  var VIEW_PANELS = {
+    home: 'homePanel', decks: 'decksPanel', review: 'reviewPanel',
+    quizzes: 'quizPanel', progress: 'progressPanel', upload: 'uploadPanel', account: 'accountPanel',
+  };
+  var currentView = 'home';
+
+  function setActiveNav(key){
+    Array.prototype.forEach.call(document.querySelectorAll('.navlink[data-view]'), function(b){
+      b.classList.toggle('active', b.getAttribute('data-view') === key);
+    });
+  }
+
   function renderView(key){
+    currentView = key;
     var v = VIEWS[key] || VIEWS.home;
     $('viewTitle').textContent = v.title;
     $('viewSub').textContent = v.sub;
-    $('panelTitle').textContent = v.panel;
-    $('panelIcon').style.setProperty('--i', 'url(/icons/' + v.icon + '.svg)');
-    $('stateEmoji').textContent = v.emoji;
-    $('stateTitle').textContent = v.h;
-    $('stateBody').textContent = v.b;
-    // Stat tiles are an overview concept — only meaningful on Home.
     $('statCards').classList.toggle('hidden', key !== 'home');
-    // Decks is the one live view; everything else is still a generic empty state.
-    var isDecks = key === 'decks';
-    $('genericPanel').classList.toggle('hidden', isDecks);
-    $('decksPanel').classList.toggle('hidden', !isDecks);
-    $('deckDetailPanel').classList.add('hidden'); // always start on the deck list
-    if (isDecks) loadDecks();
+    // Hide every view panel + the deck-detail sub-view, then show the active one.
+    Object.keys(VIEW_PANELS).forEach(function(k){ $(VIEW_PANELS[k]).classList.add('hidden'); });
+    $('deckDetailPanel').classList.add('hidden');
+    $(VIEW_PANELS[key] || 'homePanel').classList.remove('hidden');
+    setActiveNav(key);
+    if (key === 'home') loadHome();
+    else if (key === 'decks') loadDecks();
+    else if (key === 'review') loadReviewLauncher();
+    else if (key === 'quizzes') loadQuizPicker();
+    else if (key === 'progress') loadProgress();
+    else if (key === 'upload') loadUploadPicker();
+    else if (key === 'account') loadAccount();
   }
 
   Array.prototype.forEach.call(document.querySelectorAll('.navlink[data-view]'), function(btn){
@@ -488,14 +634,14 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   // ── Auth flow ──
   function greet(user){
     var email = (user && user.email) || '';
+    currentUserEmail = email;
     $('whoami').textContent = email ? 'Signed in as ' + email : '';
   }
 
   async function onSignedIn(session){
     greet(session.user);
-    renderView('home');
     show('appView');
-    loadDecks(); // populates the Home "Decks" stat even before the Decks view is opened
+    renderView('home'); // loads real stats via /api/stats
   }
 
   // ── Decks: talk to the RLS-protected API as the signed-in user ──
@@ -626,12 +772,15 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
 
   async function openDeck(d){
     currentDeck = d;
-    $('decksPanel').classList.add('hidden');
-    $('genericPanel').classList.add('hidden');
+    currentView = 'decks';
+    setActiveNav('decks');
+    $('statCards').classList.add('hidden');
+    Object.keys(VIEW_PANELS).forEach(function(k){ $(VIEW_PANELS[k]).classList.add('hidden'); });
     $('deckDetailPanel').classList.remove('hidden');
     $('deckDetailTitle').textContent = d.title;
-    $('genText').value = ''; $('genFile').value = '';
-    msgOn('genMsg', null, ''); $('genSummary').classList.add('hidden');
+    $('genText').value = ''; $('genFile').value = ''; $('genUrl').value = ''; droppedFile = null;
+    $('dropHint').textContent = 'Tip: drag a PDF, image, .docx, or .pptx onto this box.';
+    msgOn('genMsg', null, ''); $('genSummary').classList.add('hidden'); $('genPreview').classList.add('hidden');
     await loadCards();
   }
 
@@ -695,22 +844,37 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
 
   // Generation returns PROPOSED cards; nothing is saved until the user approves.
   var proposedSource = null;
+  var droppedFile = null;
+  var DOCX_MT = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  var PPTX_MT = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
 
   async function generate(){
     var text = ($('genText').value || '').trim();
-    var f = $('genFile').files && $('genFile').files[0];
-    if (!text && !f){ msgOn('genMsg', 'err', 'Paste some notes or choose a file first.'); return; }
+    var url = ($('genUrl').value || '').trim();
+    var f = droppedFile || ($('genFile').files && $('genFile').files[0]);
+    if (!text && !url && !f){ msgOn('genMsg', 'err', 'Paste notes, a link, or choose a file first.'); return; }
 
     var btn = $('genBtn'); btn.disabled = true;
     $('genPreview').classList.add('hidden');
     msgOn('genMsg', 'ok', 'Generating with AI — this can take several seconds…');
     try {
       var body = {};
-      if (f && (f.type === 'application/pdf' || /\.pdf$/i.test(f.name))){
-        body.file = { name: f.name, mediaType: 'application/pdf', dataBase64: await readFileB64(f) };
-      } else if (f){
-        var t = await readFileText(f);
-        body.text = (text ? text + '\n\n' : '') + t;
+      if (f){
+        var name = f.name || 'file';
+        var type = f.type || '';
+        if (type === 'application/pdf' || /\.pdf$/i.test(name)){
+          body.file = { name: name, mediaType: 'application/pdf', dataBase64: await readFileB64(f) };
+        } else if (type.indexOf('image/') === 0){
+          body.file = { name: name, mediaType: type, dataBase64: await readFileB64(f) };
+        } else if (/\.docx$/i.test(name) || type.indexOf('wordprocessingml') >= 0){
+          body.file = { name: name, mediaType: DOCX_MT, dataBase64: await readFileB64(f) };
+        } else if (/\.pptx$/i.test(name) || type.indexOf('presentationml') >= 0){
+          body.file = { name: name, mediaType: PPTX_MT, dataBase64: await readFileB64(f) };
+        } else {
+          body.text = (text ? text + '\n\n' : '') + (await readFileText(f));
+        }
+      } else if (url){
+        body.url = url;
       } else {
         body.text = text;
       }
@@ -786,7 +950,8 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     if (!out.res.ok || !out.data.ok){ msgOn('genMsg', 'err', out.data.error || 'Could not add the cards.'); return; }
 
     msgOn('genMsg', 'ok', 'Added ' + out.data.added + ' card' + (out.data.added === 1 ? '' : 's') + ' to the deck.');
-    $('genText').value = ''; $('genFile').value = '';
+    $('genText').value = ''; $('genFile').value = ''; $('genUrl').value = ''; droppedFile = null;
+    $('dropHint').textContent = 'Tip: drag a PDF, image, .docx, or .pptx onto this box.';
     discardPreview();
     await loadCards();
   }
@@ -813,19 +978,25 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     $('revealBtn').classList.remove('hidden');
     $('gradeRow').classList.add('hidden');
     $('reviewProgress').textContent = (reviewIdx + 1) + ' / ' + reviewQueue.length;
+    $('reviewDeck').textContent = c.deckTitle || '';
   }
 
-  function startReview(){
-    var now = Date.now();
-    reviewQueue = cardsCache.filter(function(c){ return new Date(c.due_at).getTime() <= now; });
+  function startReviewWith(cards){
+    reviewQueue = cards || [];
     reviewIdx = 0;
     $('reviewOverlay').classList.remove('hidden');
     showReviewCard();
   }
 
+  function startReview(){ // deck-level: due cards in the open deck
+    var now = Date.now();
+    startReviewWith(cardsCache.filter(function(c){ return new Date(c.due_at).getTime() <= now; }));
+  }
+
   function closeReview(){
     $('reviewOverlay').classList.add('hidden');
-    loadCards(); // refresh due counts after grading
+    if (currentView === 'review') loadReviewLauncher();
+    else if (currentDeck) loadCards(); // deck detail: refresh due count
   }
 
   async function gradeCard(grade){
@@ -835,6 +1006,179 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     if (out.res.ok && out.data.ok){ c.due_at = out.data.due_at; }
     reviewIdx += 1;
     showReviewCard();
+  }
+
+  // ── Home ──
+  async function loadHome(){
+    var out = await api('/api/stats');
+    if (out.res.status === 401){ signOut(); return; }
+    if (!out.res.ok || !out.data.ok) return;
+    var s = out.data;
+    $('statDecks').textContent = s.decks;
+    $('statDecksHint').textContent = s.decks ? (s.decks === 1 ? '1 deck' : s.decks + ' decks') : 'No decks yet';
+    $('statDue').textContent = s.due;
+    $('statDueHint').textContent = s.due ? 'Ready to review' : 'Nothing to review';
+    $('statStreak').textContent = s.streak;
+    $('statStreakHint').textContent = s.streak ? (s.streak === 1 ? '1 day — keep it up' : s.streak + ' days — keep it up') : 'Review to start a streak';
+  }
+
+  // ── Global review launcher ──
+  async function loadReviewLauncher(){
+    $('reviewLaunchEmoji').textContent = '🔁';
+    $('reviewLaunchTitle').textContent = 'Loading…';
+    $('reviewLaunchBody').textContent = "Checking what's due across your decks.";
+    $('startGlobalReviewBtn').classList.add('hidden');
+    var out = await api('/api/review/due');
+    if (out.res.status === 401){ signOut(); return; }
+    if (!out.res.ok || !out.data.ok){
+      $('reviewLaunchEmoji').textContent = '🛠️';
+      $('reviewLaunchTitle').textContent = 'Not ready';
+      $('reviewLaunchBody').textContent = 'Run the latest supabase migration, then refresh.';
+      return;
+    }
+    var cards = out.data.cards || [];
+    if (!cards.length){
+      $('reviewLaunchEmoji').textContent = '🎉';
+      $('reviewLaunchTitle').textContent = 'All caught up';
+      $('reviewLaunchBody').textContent = 'Nothing is due right now. Add material or come back later.';
+      return;
+    }
+    $('reviewLaunchTitle').textContent = cards.length + ' card' + (cards.length === 1 ? '' : 's') + ' due';
+    $('reviewLaunchBody').textContent = 'Across all your decks.';
+    var btn = $('startGlobalReviewBtn');
+    btn.classList.remove('hidden');
+    btn.onclick = function(){ startReviewWith(cards); };
+  }
+
+  // ── Quizzes ──
+  var quizCards = [], quizIdx = 0, quizScore = 0;
+
+  function shuffle(a){ for (var i = a.length - 1; i > 0; i--){ var j = Math.floor(Math.random() * (i + 1)); var t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+  function quizState(emoji, title, body){
+    var s = $('quizState'); s.classList.remove('hidden');
+    s.innerHTML = '<span class="emoji"></span><h3></h3><p></p>';
+    s.querySelector('.emoji').textContent = emoji; s.querySelector('h3').textContent = title; s.querySelector('p').textContent = body;
+    $('quizDeckList').innerHTML = '';
+  }
+  function pickDeckList(listEl, decks, onPick){
+    listEl.innerHTML = '';
+    decks.forEach(function(d){
+      var b = document.createElement('button'); b.className = 'pick-deck'; b.type = 'button';
+      var t = document.createElement('span'); t.className = 'pd-title'; t.textContent = d.title;
+      var m = document.createElement('span'); m.className = 'pd-meta'; m.textContent = (d.cardCount || 0) + ' card' + (d.cardCount === 1 ? '' : 's');
+      b.appendChild(t); b.appendChild(m);
+      b.addEventListener('click', function(){ onPick(d); });
+      listEl.appendChild(b);
+    });
+  }
+  async function loadQuizPicker(){
+    quizState('🐙', 'Loading…', 'Fetching your decks.');
+    var out = await api('/api/decks');
+    if (out.res.status === 401){ signOut(); return; }
+    if (!out.res.ok || !out.data.ok){ quizState('🛠️', 'Not ready', 'Run the latest supabase migration, then refresh.'); return; }
+    var decks = out.data.decks || [];
+    if (!decks.length){ quizState('📚', 'No decks yet', 'Create a deck and add some cards first.'); return; }
+    $('quizState').classList.add('hidden');
+    pickDeckList($('quizDeckList'), decks, startQuiz);
+  }
+  async function startQuiz(d){
+    var out = await api('/api/decks/' + encodeURIComponent(d.id) + '/cards');
+    if (out.res.status === 401){ signOut(); return; }
+    if (!out.res.ok || !out.data.ok){ window.alert('Could not load that deck.'); return; }
+    var cards = (out.data.cards || []).filter(function(c){ return c.front && c.back; });
+    if (cards.length < 4){ window.alert('A quiz needs at least 4 cards. This deck has ' + cards.length + '.'); return; }
+    var allBacks = cards.map(function(c){ return c.back; });
+    quizCards = shuffle(cards.slice()).slice(0, 20).map(function(c){
+      var distractors = shuffle(allBacks.filter(function(b){ return b !== c.back; })).slice(0, 3);
+      return { q: c.front, answer: c.back, options: shuffle([c.back].concat(distractors)) };
+    });
+    quizIdx = 0; quizScore = 0;
+    $('quizDeckName').textContent = d.title;
+    $('quizOverlay').classList.remove('hidden');
+    showQuizQuestion();
+  }
+  function showQuizQuestion(){
+    if (quizIdx >= quizCards.length){ finishQuiz(); return; }
+    var item = quizCards[quizIdx];
+    $('quizDone').classList.add('hidden');
+    $('quizQuestionWrap').classList.remove('hidden');
+    $('quizProgress').textContent = (quizIdx + 1) + ' / ' + quizCards.length;
+    $('quizQuestion').textContent = item.q;
+    var wrap = $('quizOptions'); wrap.innerHTML = '';
+    item.options.forEach(function(opt){
+      var b = document.createElement('button'); b.className = 'quiz-opt'; b.type = 'button'; b.textContent = opt;
+      b.addEventListener('click', function(){ answerQuiz(b, opt, item); });
+      wrap.appendChild(b);
+    });
+  }
+  function answerQuiz(btn, opt, item){
+    Array.prototype.forEach.call($('quizOptions').querySelectorAll('.quiz-opt'), function(b){
+      b.disabled = true;
+      if (b.textContent === item.answer) b.classList.add('correct');
+    });
+    if (opt === item.answer) quizScore++;
+    else btn.classList.add('wrong');
+    setTimeout(function(){ quizIdx++; showQuizQuestion(); }, 850);
+  }
+  function finishQuiz(){
+    $('quizQuestionWrap').classList.add('hidden');
+    $('quizProgress').textContent = '';
+    var pct = Math.round(quizScore / quizCards.length * 100);
+    $('quizScore').textContent = 'You scored ' + quizScore + ' / ' + quizCards.length;
+    $('quizScoreBody').textContent = pct >= 80 ? 'Great recall!' : pct >= 50 ? 'Solid — a few to revisit.' : "Keep reviewing — you'll get there.";
+    $('quizDoneEmoji').textContent = pct >= 80 ? '🎉' : pct >= 50 ? '💪' : '📚';
+    $('quizDone').classList.remove('hidden');
+  }
+  function closeQuiz(){ $('quizOverlay').classList.add('hidden'); }
+
+  // ── Progress ──
+  async function loadProgress(){
+    var out = await api('/api/stats');
+    if (out.res.status === 401){ signOut(); return; }
+    if (!out.res.ok || !out.data.ok) return;
+    var s = out.data;
+    $('pgStreak').textContent = s.streak;
+    $('pgToday').textContent = s.reviewedToday;
+    $('pgWeek').textContent = s.reviewed7d;
+    $('pgRetention').textContent = s.retentionPct == null ? '—' : s.retentionPct + '%';
+    $('pgCards').textContent = s.cards;
+    $('pgReviews').textContent = s.totalReviews;
+  }
+
+  // ── Upload picker ──
+  function uploadState(emoji, title, body){
+    var s = $('uploadState'); s.classList.remove('hidden');
+    s.innerHTML = '<span class="emoji"></span><h3></h3><p></p>';
+    s.querySelector('.emoji').textContent = emoji; s.querySelector('h3').textContent = title; s.querySelector('p').textContent = body;
+    $('uploadDeckList').innerHTML = '';
+  }
+  async function loadUploadPicker(){
+    uploadState('🐙', 'Loading…', 'Fetching your decks.');
+    var out = await api('/api/decks');
+    if (out.res.status === 401){ signOut(); return; }
+    if (!out.res.ok || !out.data.ok){ uploadState('🛠️', 'Not ready', 'Run the latest supabase migration, then refresh.'); return; }
+    var decks = out.data.decks || [];
+    if (!decks.length){ uploadState('📚', 'No decks yet', 'Create your first deck with the button above.'); return; }
+    $('uploadState').classList.add('hidden');
+    pickDeckList($('uploadDeckList'), decks, function(d){ openDeck(d); });
+  }
+
+  // ── Account ──
+  var currentUserEmail = '';
+  function loadAccount(){
+    $('acctEmail').textContent = currentUserEmail || '—';
+    $('acctPw').value = ''; msgOn('acctMsg', null, '');
+  }
+  async function changePassword(){
+    var pw = $('acctPw').value || '';
+    if (pw.length < 8){ msgOn('acctMsg', 'err', 'Password must be at least 8 characters.'); return; }
+    var btn = $('acctPwBtn'); btn.disabled = true;
+    try {
+      var out = await sb.auth.updateUser({ password: pw });
+      btn.disabled = false;
+      if (out.error){ msgOn('acctMsg', 'err', out.error.message || 'Could not update password.'); return; }
+      $('acctPw').value = ''; msgOn('acctMsg', 'ok', 'Password updated.');
+    } catch (ex){ btn.disabled = false; msgOn('acctMsg', 'err', 'Could not update password.'); }
   }
 
   async function signOut(){
@@ -863,6 +1207,34 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   Array.prototype.forEach.call(document.querySelectorAll('#gradeRow .grade'), function(b){
     b.addEventListener('click', function(){ gradeCard(parseInt(b.getAttribute('data-grade'), 10)); });
   });
+  // Home quick-action tiles
+  Array.prototype.forEach.call(document.querySelectorAll('.quick-btn[data-go]'), function(b){
+    b.addEventListener('click', function(){ renderView(b.getAttribute('data-go')); $('sidebar').classList.remove('open'); });
+  });
+  // Quiz overlay
+  $('quizClose').addEventListener('click', closeQuiz);
+  $('quizRetry').addEventListener('click', function(){ closeQuiz(); loadQuizPicker(); });
+  // Upload: new deck shortcut
+  $('uploadNewDeckBtn').addEventListener('click', function(){ renderView('decks'); showDeckForm(); });
+  // Account
+  $('acctPwBtn').addEventListener('click', changePassword);
+  $('acctSignout').addEventListener('click', signOut);
+  // Capture: file input + drag-and-drop
+  $('genFile').addEventListener('change', function(){
+    droppedFile = null;
+    var f = $('genFile').files && $('genFile').files[0];
+    if (f) $('dropHint').textContent = 'Ready: ' + f.name + ' — click Generate cards.';
+  });
+  (function(){
+    var form = $('genForm'); if (!form) return;
+    ['dragenter', 'dragover'].forEach(function(ev){ form.addEventListener(ev, function(e){ e.preventDefault(); form.classList.add('dragover'); }); });
+    ['dragleave', 'dragend'].forEach(function(ev){ form.addEventListener(ev, function(){ form.classList.remove('dragover'); }); });
+    form.addEventListener('drop', function(e){
+      e.preventDefault(); form.classList.remove('dragover');
+      var files = e.dataTransfer && e.dataTransfer.files;
+      if (files && files.length){ droppedFile = files[0]; $('genFile').value = ''; $('dropHint').textContent = 'Ready: ' + droppedFile.name + ' — click Generate cards.'; }
+    });
+  })();
 
   $('authForm').addEventListener('submit', async function(e){
     e.preventDefault();

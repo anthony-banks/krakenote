@@ -26,6 +26,10 @@ Status: ⬜ todo · �build in progress · ✅ done
 - ⬜ Manual card creation (no AI)
 - ⬜ Delete individual cards (DELETE /api/cards/:id)
 - ⬜ Edit individual cards (PATCH /api/cards/:id)
+- ⬜ **Fact-check / more-context per card** — in deck view, a button next to a card
+      asks the AI to verify the card and add supporting context, shown inline; then
+      an "Update card" action applies the AI's suggested correction, **with a
+      confirmation step** before the card is changed. (New AI endpoint per card.)
 - ⬜ Card-type control in capture form (Basic/Cloze/Mix → prompt)
 - ⬜ Filter review by deck (Review nav)
 - ⬜ "Study again this session" in review

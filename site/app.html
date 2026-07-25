@@ -60,7 +60,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   nav{position:sticky;top:0;z-index:50;background:var(--nav-bg);backdrop-filter:blur(12px);border-bottom:1px solid var(--border)}
   nav .bar{display:flex;align-items:center;justify-content:space-between;height:70px;padding:0 24px;gap:14px}
   .brand{display:flex;align-items:center;gap:10px;font-family:var(--head);font-weight:800;font-size:22px;letter-spacing:-.5px;color:var(--text);text-decoration:none}
-  .brand .mark{width:66px;height:49px}
+  .brand .mark{width:86px;height:64px}
   .navright{display:flex;align-items:center;gap:12px}
   #whoami{color:var(--muted);font-size:14px;max-width:34vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .theme-toggle{background:transparent;border:1px solid var(--border);color:var(--muted);width:40px;height:40px;border-radius:12px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
@@ -97,7 +97,8 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   /* ── App shell ── */
   .shell{display:grid;grid-template-columns:236px 1fr;min-height:calc(100vh - 70px)}
   aside{position:sticky;top:70px;align-self:start;height:calc(100vh - 70px);overflow-y:auto;border-right:1px solid var(--border);padding:22px 14px;display:flex;flex-direction:column;gap:6px}
-  .navlink .ic{width:22px;height:22px}
+  .navlink .ic{width:26px;height:26px}
+  .logout-ic{width:26px;height:26px;flex:none;stroke:var(--danger);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
   .nav-collapse{align-self:flex-end;background:transparent;border:1px solid var(--border);color:var(--muted);width:30px;height:30px;border-radius:9px;cursor:pointer;font-size:18px;line-height:1;display:none;align-items:center;justify-content:center;margin-bottom:4px}
   .nav-collapse:hover{color:var(--accent);border-color:var(--accent)}
   @media(min-width:821px){
@@ -117,7 +118,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   .navlink.active{color:var(--cta-text);background:var(--cta);box-shadow:0 8px 22px var(--cta-shadow)}
   :root[data-theme="light"] .navlink.active{color:#fff}
   .aside-sep{flex:1}
-  .signout-side{color:var(--muted)}
+  .signout-side{color:var(--danger)}
   .signout-side:hover{color:var(--danger);background:color-mix(in srgb,var(--danger) 10%,transparent)}
 
   main{padding:34px 30px 70px;min-width:0;background:color-mix(in srgb,var(--bg) 93%,#9ab8ea)}
@@ -316,7 +317,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     <button class="navlink" data-view="progress"><i class="ic" style="--i:url(/icons/progressBar.svg)"></i><span class="nav-label">Progress</span></button>
     <button class="navlink" data-view="account"><i class="ic" style="--i:url(/icons/profile.svg)"></i><span class="nav-label">Account</span></button>
     <div class="aside-sep"></div>
-    <button class="navlink signout-side" id="signoutSide"><i class="ic" style="--i:url(/icons/x.svg)"></i><span class="nav-label">Sign out</span></button>
+    <button class="navlink signout-side" id="signoutSide"><svg class="logout-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg><span class="nav-label">Sign out</span></button>
   </aside>
 
   <main>

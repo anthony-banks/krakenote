@@ -508,6 +508,20 @@ app.get('/api/decks/:id/cards', requireUser, async (req, res) => {
   return res.json({ ok: true, cards: data || [] });
 });
 
+// What a deck was built from — the sources + AI summaries, newest first.
+app.get('/api/decks/:id/sources', requireUser, async (req, res) => {
+  const { data, error } = await req.db
+    .from('sources')
+    .select('id, kind, filename, summary, created_at')
+    .eq('deck_id', req.params.id)
+    .order('created_at', { ascending: false });
+  if (error) {
+    console.error('[sources] list failed:', error.message);
+    return res.status(500).json({ ok: false, error: 'Could not load the deck overview.' });
+  }
+  return res.json({ ok: true, sources: data || [] });
+});
+
 // Grade a review with SM-2. grade: 0 Again, 3 Hard, 4 Good, 5 Easy.
 app.post('/api/cards/:id/review', requireUser, async (req, res) => {
   const grade = Number(req.body?.grade);

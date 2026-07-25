@@ -175,6 +175,14 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   .card-row .q{font-family:var(--head);font-weight:600;font-size:15px}
   .card-row .a{font-size:14px;color:var(--muted);margin-top:4px}
 
+  /* Deck overview (sources + summaries) */
+  .deck-overview{padding:16px 22px;border-bottom:1px solid var(--border)}
+  .ov-head{font-family:var(--head);font-weight:700;font-size:14px;margin-bottom:10px}
+  .ov-item{background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:8px}
+  .ov-src{font-family:var(--head);font-weight:600;font-size:12.5px;color:var(--accent);margin-bottom:5px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .ov-date{color:var(--muted);font-weight:500;margin-left:auto}
+  .ov-sum{font-size:13.5px;color:var(--text);line-height:1.5}
+
   /* Review overlay */
   .review-overlay{position:fixed;inset:0;z-index:60;background:color-mix(in srgb,var(--bg) 82%,#000);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;padding:20px}
   .review-box{width:100%;max-width:560px;background:var(--surface);border:1px solid var(--border);border-radius:22px;padding:22px;box-shadow:0 24px 60px rgba(0,0,0,.35);display:flex;flex-direction:column;gap:16px}
@@ -310,12 +318,12 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
 <div id="appView" class="shell hidden">
   <aside id="sidebar">
     <button class="nav-collapse" id="navCollapse" type="button" aria-label="Collapse sidebar"><span id="navChevron">‹</span></button>
-    <button class="navlink active" data-view="home"><i class="ic" style="--i:url(/icons/home.svg)"></i><span class="nav-label">Home</span></button>
+    <button class="navlink active" data-view="home"><i class="ic" style="--i:url(/icons/anchor.svg)"></i><span class="nav-label">Home</span></button>
     <button class="navlink" data-view="decks"><i class="ic" style="--i:url(/icons/list.svg)"></i><span class="nav-label">Decks</span></button>
-    <button class="navlink" data-view="review"><i class="ic" style="--i:url(/icons/restartTime.svg)"></i><span class="nav-label">Review</span></button>
+    <button class="navlink" data-view="review"><i class="ic" style="--i:url(/icons/wave.svg)"></i><span class="nav-label">Review</span></button>
     <button class="navlink" data-view="quizzes"><i class="ic" style="--i:url(/icons/question.svg)"></i><span class="nav-label">Quizzes</span></button>
     <button class="navlink" data-view="progress"><i class="ic" style="--i:url(/icons/progressBar.svg)"></i><span class="nav-label">Progress</span></button>
-    <button class="navlink" data-view="account"><i class="ic" style="--i:url(/icons/profile.svg)"></i><span class="nav-label">Account</span></button>
+    <button class="navlink" data-view="account"><i class="ic" style="--i:url(/icons/account.svg)"></i><span class="nav-label">Account</span></button>
     <div class="aside-sep"></div>
     <button class="navlink signout-side" id="signoutSide"><svg class="logout-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg><span class="nav-label">Sign out</span></button>
   </aside>
@@ -473,6 +481,10 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
         </div>
       </div>
 
+      <div class="deck-overview hidden" id="deckOverview">
+        <div class="ov-head">Overview — what this deck was built from</div>
+        <div id="ovList"></div>
+      </div>
       <div class="state" id="cardsState">
         <span class="emoji">🐙</span>
         <h3>Loading…</h3>
@@ -794,7 +806,9 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     $('genText').value = ''; $('genFile').value = ''; $('genUrl').value = ''; droppedFile = null;
     $('dropHint').textContent = 'Tip: drag a PDF, image, .docx, or .pptx onto this box.';
     msgOn('genMsg', null, ''); $('genSummary').classList.add('hidden'); $('genPreview').classList.add('hidden');
+    $('deckOverview').classList.add('hidden');
     await loadCards();
+    loadSources();
   }
 
   function backToDeckList(){
@@ -838,6 +852,36 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     }
     cardsCache = out.data.cards || [];
     renderCards();
+  }
+
+  // Deck overview: the material (and AI summaries) the deck was built from.
+  var SRC_LABEL = { text: '📝 Pasted notes', pdf: '📄 PDF', image: '🖼️ Image', url: '🔗 Article link', docx: '📄 Word document', pptx: '📊 Slides', file: '📄 File' };
+  function fmtShortDate(iso){
+    if (!iso) return '';
+    var d = new Date(iso); if (isNaN(d.getTime())) return '';
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  }
+  async function loadSources(){
+    var ov = $('deckOverview');
+    var out;
+    try { out = await api('/api/decks/' + encodeURIComponent(currentDeck.id) + '/sources'); }
+    catch (e){ ov.classList.add('hidden'); return; }
+    if (out.res.status === 401){ signOut(); return; }
+    if (!out.res.ok || !out.data.ok){ ov.classList.add('hidden'); return; }
+    var sources = out.data.sources || [];
+    if (!sources.length){ ov.classList.add('hidden'); return; }
+    var list = $('ovList'); list.innerHTML = '';
+    sources.forEach(function(s){
+      var item = document.createElement('div'); item.className = 'ov-item';
+      var src = document.createElement('div'); src.className = 'ov-src';
+      var label = document.createElement('span');
+      label.textContent = (SRC_LABEL[s.kind] || '📄 Source') + (s.filename ? ' — ' + s.filename : '');
+      var date = document.createElement('span'); date.className = 'ov-date'; date.textContent = fmtShortDate(s.created_at);
+      src.appendChild(label); src.appendChild(date);
+      var sum = document.createElement('div'); sum.className = 'ov-sum'; sum.textContent = s.summary || '(no summary)';
+      item.appendChild(src); item.appendChild(sum); list.appendChild(item);
+    });
+    ov.classList.remove('hidden');
   }
 
   function readFileB64(file){
@@ -970,6 +1014,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     $('dropHint').textContent = 'Tip: drag a PDF, image, .docx, or .pptx onto this box.';
     discardPreview();
     await loadCards();
+    loadSources();
   }
 
   // ── Review (SM-2) ──

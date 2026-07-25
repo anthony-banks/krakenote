@@ -33,6 +33,8 @@ Status: ⬜ todo · �build in progress · ✅ done
 - ⬜ Card-type control in capture form (Basic/Cloze/Mix → prompt)
 - ⬜ Filter review by deck (Review nav)
 - ⬜ "Study again this session" in review
+- ⬜ **Re-sort / reorder cards** in a deck — sort by created date, A–Z (front),
+      due date, or card type; optional manual drag-to-reorder (needs a sort_order column)
 
 ## Batch 3 — FSRS migration
 - ⬜ Add FSRS card-state columns (difficulty, stability, state, last_review) via migration
@@ -46,6 +48,8 @@ Status: ⬜ todo · �build in progress · ✅ done
 
 ## Batch 5 — Bulk upload + queue
 - ⬜ Multi-file / queued generation with a visible pending-queue UI
+- ⬜ **CSV card support** — import cards from a CSV (`front,back[,hint,type]`) to
+      bulk-create without AI, and export a deck to CSV (Anki/Quizlet-friendly)
 
 ## Research shortlist (from web search 2026-07-25)
 - **ts-fsrs** — modern spaced repetition (adopting, Batch 3).

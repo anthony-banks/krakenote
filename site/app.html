@@ -183,6 +183,42 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   .ov-date{color:var(--muted);font-weight:500;margin-left:auto}
   .ov-sum{font-size:13.5px;color:var(--text);line-height:1.5}
 
+  /* Card-type control (capture) */
+  .type-control{display:flex;align-items:center;gap:14px;flex-wrap:wrap;font-size:13.5px;color:var(--muted)}
+  .type-control span{font-family:var(--head);font-weight:600;color:var(--text)}
+  .type-control label{display:flex;align-items:center;gap:5px;cursor:pointer}
+
+  /* Cards toolbar + rows */
+  .cards-toolbar{display:flex;align-items:center;gap:14px;padding:14px 22px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+  .sort-label{margin-left:auto;font-size:13px;color:var(--muted);display:flex;align-items:center;gap:8px}
+  .cards-toolbar select,.review-filter select,.modal-box select{font-family:var(--body);font-size:14px;padding:8px 10px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface-2);color:var(--text);outline:none}
+  .card-row-head{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+  .card-badge{font-family:var(--head);font-weight:700;font-size:10px;letter-spacing:.5px;text-transform:uppercase;padding:2px 8px;border-radius:999px;border:1px solid var(--border);color:var(--muted)}
+  .card-badge.cloze{color:var(--accent2);border-color:color-mix(in srgb,var(--accent2) 40%,transparent)}
+  .card-actions{display:flex;gap:6px;margin-left:auto}
+  .card-act{width:30px;height:30px;border-radius:9px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
+  .card-act:hover{color:var(--accent);border-color:var(--accent)}
+  .card-act.danger:hover{color:var(--danger);border-color:var(--danger)}
+  .card-act .ic{width:15px;height:15px}
+
+  /* Review filter */
+  .review-filter{padding:14px 22px 0;font-size:13px;color:var(--muted)}
+  .review-filter label{display:flex;align-items:center;gap:8px}
+
+  /* Modals */
+  .modal-overlay{position:fixed;inset:0;z-index:70;background:color-mix(in srgb,var(--bg) 82%,#000);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;padding:20px}
+  .modal-box{width:100%;max-width:520px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:24px;box-shadow:0 24px 60px rgba(0,0,0,.35);display:flex;flex-direction:column;gap:14px;max-height:90vh;overflow-y:auto}
+  .modal-title{font-family:var(--head);font-weight:800;font-size:20px}
+  .modal-body{font-size:14.5px;color:var(--text);line-height:1.55}
+  .modal-body p{margin-bottom:8px}
+  .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:2px}
+  .modal-field{display:flex;flex-direction:column;gap:6px}
+  .modal-field label{font-family:var(--head);font-weight:600;font-size:13px}
+  .modal-box textarea,.modal-box input[type=text]{width:100%;font-family:var(--body);font-size:15px;padding:11px 13px;border-radius:11px;border:1.5px solid var(--border);background:var(--surface-2);color:var(--text);outline:none;resize:vertical}
+  .modal-box textarea:focus,.modal-box input:focus{border-color:var(--accent)}
+  .fact-sugg{background:color-mix(in srgb,var(--accent) 10%,transparent);border:1px solid color-mix(in srgb,var(--accent) 26%,transparent);border-radius:12px;padding:12px 14px;margin-top:8px}
+  .fact-sugg-h{font-family:var(--head);font-weight:700;font-size:13px;margin-bottom:6px;color:var(--accent)}
+
   /* Review overlay */
   .review-overlay{position:fixed;inset:0;z-index:60;background:color-mix(in srgb,var(--bg) 82%,#000);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;padding:20px}
   .review-box{width:100%;max-width:560px;background:var(--surface);border:1px solid var(--border);border-radius:22px;padding:22px;box-shadow:0 24px 60px rgba(0,0,0,.35);display:flex;flex-direction:column;gap:16px}
@@ -365,7 +401,12 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
 
     <!-- REVIEW: global launcher over all due cards -->
     <div class="panel view-panel hidden" id="reviewPanel">
-      <div class="panel-head"><i class="ic" style="--i:url(/icons/restartTime.svg)"></i><h2>Review</h2></div>
+      <div class="panel-head"><i class="ic" style="--i:url(/icons/wave.svg)"></i><h2>Review</h2></div>
+      <div class="review-filter">
+        <label>Deck
+          <select id="reviewDeckSel"><option value="">All decks</option></select>
+        </label>
+      </div>
       <div class="state">
         <span class="emoji" id="reviewLaunchEmoji">🔁</span>
         <h3 id="reviewLaunchTitle">Loading…</h3>
@@ -460,6 +501,12 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       <div class="gen-form" id="genForm">
         <textarea id="genText" rows="4" placeholder="Paste notes here — or drop a file/image, or paste a link below — then let AI make flashcards."></textarea>
         <input type="url" id="genUrl" class="gen-url" placeholder="…or paste an article URL (https://…)" />
+        <div class="type-control">
+          <span>Card types:</span>
+          <label><input type="radio" name="cardType" value="mix" checked /> Mix</label>
+          <label><input type="radio" name="cardType" value="basic" /> Basic</label>
+          <label><input type="radio" name="cardType" value="cloze" /> Cloze</label>
+        </div>
         <div class="row">
           <input type="file" id="genFile" accept=".pdf,.txt,.md,.docx,.pptx,image/*,application/pdf,text/plain,text/markdown" />
           <button class="btn btn-primary" id="genBtn" type="button">✨ Generate cards</button>
@@ -484,6 +531,17 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       <div class="deck-overview hidden" id="deckOverview">
         <div class="ov-head">Overview — what this deck was built from</div>
         <div id="ovList"></div>
+      </div>
+      <div class="cards-toolbar hidden" id="cardsToolbar">
+        <button class="btn btn-primary" id="addCardBtn" type="button">+ Add card</button>
+        <label class="sort-label">Sort
+          <select id="cardSort">
+            <option value="created">Newest</option>
+            <option value="az">A–Z</option>
+            <option value="due">Due date</option>
+            <option value="type">Card type</option>
+          </select>
+        </label>
       </div>
       <div class="state" id="cardsState">
         <span class="emoji">🐙</span>
@@ -515,6 +573,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
         <button class="grade" type="button" data-grade="4">Good<small>on track</small></button>
         <button class="grade" type="button" data-grade="5">Easy<small>later</small></button>
       </div>
+      <button class="linkbtn hidden" id="studyAgainBtn" type="button" style="align-self:center">↺ Study again this session</button>
       <div class="review-done hidden" id="reviewDone">
         <span style="font-size:36px;display:block;margin-bottom:10px">🎉</span>
         <p>All caught up — nothing else due right now.</p>
@@ -543,6 +602,39 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
           <button class="btn btn-primary" id="quizRetry" type="button">Try again</button>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- Card editor modal (add / edit) -->
+  <div class="modal-overlay hidden" id="cardModal">
+    <div class="modal-box">
+      <div class="modal-title" id="cardModalTitle">New card</div>
+      <div class="modal-field"><label>Type</label>
+        <select id="cmType"><option value="basic">Basic (question &amp; answer)</option><option value="cloze">Cloze (fill in the blank)</option></select>
+      </div>
+      <div class="modal-field"><label id="cmFrontLabel">Front — the question</label><textarea id="cmFront" rows="2"></textarea></div>
+      <div class="modal-field"><label>Back — the answer</label><textarea id="cmBack" rows="2"></textarea></div>
+      <div class="modal-field"><label>Hint (optional)</label><input id="cmHint" type="text" /></div>
+      <div class="msg" id="cmMsg"></div>
+      <div class="modal-actions"><button class="linkbtn" id="cmCancel" type="button">Cancel</button><button class="btn btn-primary" id="cmSave" type="button">Save</button></div>
+    </div>
+  </div>
+
+  <!-- Fact-check modal -->
+  <div class="modal-overlay hidden" id="factModal">
+    <div class="modal-box">
+      <div class="modal-title">Fact check</div>
+      <div class="modal-body" id="factBody">Checking…</div>
+      <div class="modal-actions"><button class="linkbtn" id="factClose" type="button">Close</button><button class="btn btn-primary hidden" id="factApply" type="button">Update card</button></div>
+    </div>
+  </div>
+
+  <!-- Generic confirm modal -->
+  <div class="modal-overlay hidden" id="confirmModal">
+    <div class="modal-box">
+      <div class="modal-title" id="confirmTitle">Are you sure?</div>
+      <div class="modal-body" id="confirmBody"></div>
+      <div class="modal-actions"><button class="linkbtn" id="confirmCancel" type="button">Cancel</button><button class="btn btn-primary" id="confirmOk" type="button">Confirm</button></div>
     </div>
   </div>
 </div>
@@ -771,12 +863,97 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     await loadDecks();
   }
 
-  async function deleteDeck(d){
-    if (!window.confirm('Delete “' + d.title + '”? This removes the deck and its cards.')) return;
-    var out = await api('/api/decks/' + encodeURIComponent(d.id), { method:'DELETE' });
+  function deleteDeck(d){
+    showConfirm('Delete deck?', 'This permanently removes “' + d.title + '” and all of its cards.', 'Delete', async function(){
+      var out = await api('/api/decks/' + encodeURIComponent(d.id), { method:'DELETE' });
+      if (out.res.status === 401){ signOut(); return; }
+      if (!out.res.ok || !out.data.ok){ window.alert(out.data.error || 'Could not delete the deck.'); return; }
+      await loadDecks();
+    });
+  }
+
+  // ── Generic confirm modal ──
+  var _confirmCb = null;
+  function showConfirm(title, body, okLabel, onOk){
+    $('confirmTitle').textContent = title;
+    $('confirmBody').textContent = body;
+    $('confirmOk').textContent = okLabel || 'Confirm';
+    _confirmCb = onOk;
+    $('confirmModal').classList.remove('hidden');
+  }
+  function hideConfirm(){ $('confirmModal').classList.add('hidden'); _confirmCb = null; }
+
+  function escapeHtml(s){
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  // ── Card editor (add / edit) ──
+  var editingCardId = null;
+  function openCardEditor(card){
+    editingCardId = card ? card.id : null;
+    $('cardModalTitle').textContent = card ? 'Edit card' : 'New card';
+    $('cmType').value = card ? (card.card_type || 'basic') : 'basic';
+    $('cmFront').value = card ? card.front : '';
+    $('cmBack').value = card ? card.back : '';
+    $('cmHint').value = card && card.hint ? card.hint : '';
+    msgOn('cmMsg', null, '');
+    $('cardModal').classList.remove('hidden');
+    $('cmFront').focus();
+  }
+  async function saveCard(){
+    var front = ($('cmFront').value || '').trim();
+    var back = ($('cmBack').value || '').trim();
+    if (!front || !back){ msgOn('cmMsg', 'err', 'Front and back are both required.'); return; }
+    var payload = { type: $('cmType').value, front: front, back: back, hint: ($('cmHint').value || '').trim() };
+    var btn = $('cmSave'); btn.disabled = true;
+    var out;
+    if (editingCardId){
+      out = await api('/api/cards/' + encodeURIComponent(editingCardId), { method:'PATCH', body: JSON.stringify(payload) });
+    } else {
+      out = await api('/api/decks/' + encodeURIComponent(currentDeck.id) + '/cards', { method:'POST', body: JSON.stringify({ cards: [payload] }) });
+    }
+    btn.disabled = false;
     if (out.res.status === 401){ signOut(); return; }
-    if (!out.res.ok || !out.data.ok){ window.alert(out.data.error || 'Could not delete the deck.'); return; }
-    await loadDecks();
+    if (!out.res.ok || !out.data.ok){ msgOn('cmMsg', 'err', out.data.error || 'Could not save the card.'); return; }
+    $('cardModal').classList.add('hidden');
+    await loadCards();
+  }
+  function deleteCard(card){
+    showConfirm('Delete card?', card.front, 'Delete', async function(){
+      var out = await api('/api/cards/' + encodeURIComponent(card.id), { method:'DELETE' });
+      if (out.res.status === 401){ signOut(); return; }
+      if (out.res.ok && out.data.ok) await loadCards();
+    });
+  }
+
+  // ── Fact-check (verify against general knowledge; opposite of strict generation) ──
+  var factCardId = null, factSuggestion = null;
+  async function factCheckCard(card){
+    factCardId = card.id; factSuggestion = null;
+    $('factApply').classList.add('hidden');
+    $('factBody').innerHTML = '<span class="spinner"></span> Checking this card against general knowledge…';
+    $('factModal').classList.remove('hidden');
+    var out = await api('/api/cards/' + encodeURIComponent(card.id) + '/factcheck', { method:'POST', body: '{}' });
+    if (out.res.status === 401){ signOut(); return; }
+    if (!out.res.ok || !out.data.ok){ $('factBody').textContent = out.data.error || 'Fact-check failed.'; return; }
+    var d = out.data;
+    var html = '<p><b>' + (d.accurate ? '✅ Looks accurate' : '⚠️ May need a correction') + '</b></p><p>' + escapeHtml(d.context) + '</p>';
+    if (d.hasSuggestion && (d.suggestedFront !== card.front || d.suggestedBack !== card.back)){
+      factSuggestion = { front: d.suggestedFront, back: d.suggestedBack };
+      html += '<div class="fact-sugg"><div class="fact-sugg-h">Suggested correction</div><p><b>Q:</b> ' + escapeHtml(d.suggestedFront) + '</p><p><b>A:</b> ' + escapeHtml(d.suggestedBack) + '</p></div>';
+      $('factApply').classList.remove('hidden');
+    }
+    $('factBody').innerHTML = html;
+  }
+
+  // ── Study again this session (re-queue current card, no schedule change) ──
+  function studyAgain(){
+    if (reviewIdx >= reviewQueue.length) return;
+    reviewQueue.push(reviewQueue[reviewIdx]);
+    reviewIdx += 1;
+    showReviewCard();
   }
 
   // ── Deck detail: upload/generate material, list cards, review ──
@@ -822,28 +999,51 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     return cardsCache.filter(function(c){ return new Date(c.due_at).getTime() <= now; }).length;
   }
 
+  var cardSortMode = 'created';
+  function sortedCards(){
+    var arr = cardsCache.slice();
+    if (cardSortMode === 'az') arr.sort(function(a, b){ return (a.front || '').localeCompare(b.front || ''); });
+    else if (cardSortMode === 'due') arr.sort(function(a, b){ return new Date(a.due_at) - new Date(b.due_at); });
+    else if (cardSortMode === 'type') arr.sort(function(a, b){ return (a.card_type || '').localeCompare(b.card_type || ''); });
+    return arr; // 'created' keeps server order (created_at asc)
+  }
+  function mkCardAct(title, icon, danger){
+    var b = document.createElement('button'); b.className = 'card-act' + (danger ? ' danger' : ''); b.type = 'button'; b.title = title;
+    b.innerHTML = '<i class="ic" style="--i:url(/icons/' + icon + '.svg)"></i>';
+    return b;
+  }
   function renderCards(){
     var n = dueCount();
-    var rb = $('reviewBtn');
-    rb.textContent = 'Review due (' + n + ')';
-    rb.disabled = n === 0;
+    var rb = $('reviewBtn'); rb.textContent = 'Review due (' + n + ')'; rb.disabled = n === 0;
+    $('cardsToolbar').classList.remove('hidden');
     var list = $('cardsList');
     if (!cardsCache.length){
-      cardsState('🃏', 'No cards yet', 'Paste notes or a PDF above and generate your first flashcards.');
+      cardsState('🃏', 'No cards yet', 'Generate cards above, or add one manually with “+ Add card”.');
+      $('cardsToolbar').classList.remove('hidden');
       return;
     }
     $('cardsState').classList.add('hidden');
     list.innerHTML = '';
-    cardsCache.forEach(function(c){
+    sortedCards().forEach(function(c){
       var row = document.createElement('div'); row.className = 'card-row';
+      var head = document.createElement('div'); head.className = 'card-row-head';
+      var badge = document.createElement('span'); badge.className = 'card-badge ' + (c.card_type || 'basic');
+      badge.textContent = c.card_type === 'cloze' ? 'Cloze' : 'Basic';
+      var actions = document.createElement('div'); actions.className = 'card-actions';
+      var fc = mkCardAct('Fact-check', 'magnifier', false); fc.addEventListener('click', function(){ factCheckCard(c); });
+      var ed = mkCardAct('Edit', 'simplePenLogo', false); ed.addEventListener('click', function(){ openCardEditor(c); });
+      var del = mkCardAct('Delete', 'bin', true); del.addEventListener('click', function(){ deleteCard(c); });
+      actions.appendChild(fc); actions.appendChild(ed); actions.appendChild(del);
+      head.appendChild(badge); head.appendChild(actions);
       var q = document.createElement('div'); q.className = 'q'; q.textContent = c.front;
       var a = document.createElement('div'); a.className = 'a'; a.textContent = c.back;
-      row.appendChild(q); row.appendChild(a); list.appendChild(row);
+      row.appendChild(head); row.appendChild(q); row.appendChild(a); list.appendChild(row);
     });
   }
 
   async function loadCards(){
     cardsState('🐙', 'Loading…', 'Fetching cards.');
+    $('cardsToolbar').classList.add('hidden');
     var out = await api('/api/decks/' + encodeURIComponent(currentDeck.id) + '/cards');
     if (out.res.status === 401){ signOut(); return; }
     if (!out.res.ok || !out.data.ok){
@@ -936,6 +1136,8 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       } else {
         body.text = text;
       }
+      var ctSel = document.querySelector('input[name=cardType]:checked');
+      body.cardType = ctSel ? ctSel.value : 'mix';
       var out = await api('/api/decks/' + encodeURIComponent(currentDeck.id) + '/generate',
         { method:'POST', body: JSON.stringify(body) });
       btn.disabled = false;
@@ -1025,6 +1227,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       $('reviewCard').classList.add('hidden');
       $('revealBtn').classList.add('hidden');
       $('gradeRow').classList.add('hidden');
+    $('studyAgainBtn').classList.add('hidden');
       $('reviewProgress').textContent = '';
       $('reviewDone').classList.remove('hidden');
       return;
@@ -1038,6 +1241,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     $('reviewBack').classList.add('hidden');
     $('revealBtn').classList.remove('hidden');
     $('gradeRow').classList.add('hidden');
+    $('studyAgainBtn').classList.add('hidden');
     $('reviewProgress').textContent = (reviewIdx + 1) + ' / ' + reviewQueue.length;
     $('reviewDeck').textContent = c.deckTitle || '';
   }
@@ -1085,11 +1289,20 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
 
   // ── Global review launcher ──
   async function loadReviewLauncher(){
+    var sel = $('reviewDeckSel');
+    if (sel.getAttribute('data-loaded') !== '1'){
+      var dout = await api('/api/decks');
+      if (dout.res.ok && dout.data.ok){
+        (dout.data.decks || []).forEach(function(d){ var o = document.createElement('option'); o.value = d.id; o.textContent = d.title; sel.appendChild(o); });
+      }
+      sel.setAttribute('data-loaded', '1');
+    }
+    var deckId = sel.value || '';
     $('reviewLaunchEmoji').textContent = '🔁';
     $('reviewLaunchTitle').textContent = 'Loading…';
-    $('reviewLaunchBody').textContent = "Checking what's due across your decks.";
+    $('reviewLaunchBody').textContent = "Checking what's due.";
     $('startGlobalReviewBtn').classList.add('hidden');
-    var out = await api('/api/review/due');
+    var out = await api('/api/review/due' + (deckId ? '?deckId=' + encodeURIComponent(deckId) : ''));
     if (out.res.status === 401){ signOut(); return; }
     if (!out.res.ok || !out.data.ok){
       $('reviewLaunchEmoji').textContent = '🛠️';
@@ -1098,14 +1311,15 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       return;
     }
     var cards = out.data.cards || [];
+    var scope = deckId ? 'in this deck' : 'across all your decks';
     if (!cards.length){
       $('reviewLaunchEmoji').textContent = '🎉';
       $('reviewLaunchTitle').textContent = 'All caught up';
-      $('reviewLaunchBody').textContent = 'Nothing is due right now. Add material or come back later.';
+      $('reviewLaunchBody').textContent = 'Nothing is due ' + scope + ' right now.';
       return;
     }
     $('reviewLaunchTitle').textContent = cards.length + ' card' + (cards.length === 1 ? '' : 's') + ' due';
-    $('reviewLaunchBody').textContent = 'Across all your decks.';
+    $('reviewLaunchBody').textContent = scope.charAt(0).toUpperCase() + scope.slice(1) + '.';
     var btn = $('startGlobalReviewBtn');
     btn.classList.remove('hidden');
     btn.onclick = function(){ startReviewWith(cards); };
@@ -1278,6 +1492,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     $('reviewBack').classList.remove('hidden');
     $('revealBtn').classList.add('hidden');
     $('gradeRow').classList.remove('hidden');
+    $('studyAgainBtn').classList.remove('hidden');
   });
   Array.prototype.forEach.call(document.querySelectorAll('#gradeRow .grade'), function(b){
     b.addEventListener('click', function(){ gradeCard(parseInt(b.getAttribute('data-grade'), 10)); });
@@ -1294,6 +1509,26 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   // Account
   $('acctPwBtn').addEventListener('click', changePassword);
   $('acctSignout').addEventListener('click', signOut);
+  // Card management
+  $('addCardBtn').addEventListener('click', function(){ openCardEditor(null); });
+  $('cmSave').addEventListener('click', saveCard);
+  $('cmCancel').addEventListener('click', function(){ $('cardModal').classList.add('hidden'); });
+  $('cardSort').addEventListener('change', function(){ cardSortMode = $('cardSort').value; renderCards(); });
+  // Fact-check modal
+  $('factClose').addEventListener('click', function(){ $('factModal').classList.add('hidden'); });
+  $('factApply').addEventListener('click', function(){
+    if (!factSuggestion) return;
+    showConfirm('Update this card?', "Replace the card with the AI's suggested correction?", 'Update', async function(){
+      var out = await api('/api/cards/' + encodeURIComponent(factCardId), { method:'PATCH', body: JSON.stringify(factSuggestion) });
+      if (out.res.ok && out.data.ok){ $('factModal').classList.add('hidden'); await loadCards(); }
+    });
+  });
+  // Confirm modal
+  $('confirmCancel').addEventListener('click', hideConfirm);
+  $('confirmOk').addEventListener('click', function(){ var cb = _confirmCb; hideConfirm(); if (cb) cb(); });
+  // Review deck filter + study-again
+  $('reviewDeckSel').addEventListener('change', loadReviewLauncher);
+  $('studyAgainBtn').addEventListener('click', studyAgain);
   // Capture: file input + drag-and-drop
   $('genFile').addEventListener('change', function(){
     droppedFile = null;

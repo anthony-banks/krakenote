@@ -412,12 +412,19 @@ app.post('/api/decks/:id/generate', requireUser, async (req, res) => {
     return res.status(400).json({ ok: false, error: ex.message || 'Could not read that input.' });
   }
 
+  // Card-type control: 'basic' | 'cloze' | 'mix' (default).
+  const ct = req.body?.cardType;
+  const typeInstr =
+    ct === 'basic' ? ' Produce ONLY basic question/answer cards — no cloze.'
+    : ct === 'cloze' ? ' Produce ONLY cloze fill-in-the-blank cards.'
+    : ' Produce a mix of basic and cloze cards — aim for roughly one-third cloze.';
+
   let result;
   try {
     const msg = await anthropic.messages.create({
       model: AI_MODEL,
       max_tokens: 16000,
-      system: GEN_SYSTEM,
+      system: GEN_SYSTEM + typeInstr,
       output_config: { format: { type: 'json_schema', schema: CARD_SCHEMA }, effort: 'low' },
       messages: [{ role: 'user', content: userContent }],
     });
@@ -522,6 +529,85 @@ app.get('/api/decks/:id/sources', requireUser, async (req, res) => {
   return res.json({ ok: true, sources: data || [] });
 });
 
+// Edit a single card (front/back/hint/type). RLS scopes it to the owner.
+app.patch('/api/cards/:id', requireUser, async (req, res) => {
+  const patch = {};
+  if (typeof req.body?.front === 'string') patch.front = req.body.front.trim().slice(0, 2000);
+  if (typeof req.body?.back === 'string') patch.back = req.body.back.trim().slice(0, 4000);
+  if (typeof req.body?.hint === 'string') patch.hint = req.body.hint.slice(0, 500) || null;
+  if (req.body?.type === 'basic' || req.body?.type === 'cloze') patch.card_type = req.body.type;
+  if (!Object.keys(patch).length) return res.status(400).json({ ok: false, error: 'Nothing to update.' });
+  if (patch.front === '' || patch.back === '') return res.status(400).json({ ok: false, error: 'Front and back cannot be empty.' });
+  const { error } = await req.db.from('cards').update(patch).eq('id', req.params.id);
+  if (error) {
+    console.error('[cards] update failed:', error.message);
+    return res.status(500).json({ ok: false, error: 'Could not update the card.' });
+  }
+  return res.json({ ok: true });
+});
+
+// Delete a single card.
+app.delete('/api/cards/:id', requireUser, async (req, res) => {
+  const { error } = await req.db.from('cards').delete().eq('id', req.params.id);
+  if (error) {
+    console.error('[cards] delete failed:', error.message);
+    return res.status(500).json({ ok: false, error: 'Could not delete the card.' });
+  }
+  return res.json({ ok: true });
+});
+
+// Fact-check a card against general knowledge (NOT strict-from-source — this is
+// the deliberate opposite of generation: verify the card is actually correct).
+const FACTCHECK_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    accurate: { type: 'boolean' },
+    context: { type: 'string' },
+    hasSuggestion: { type: 'boolean' },
+    suggestedFront: { type: 'string' },
+    suggestedBack: { type: 'string' },
+  },
+  required: ['accurate', 'context', 'hasSuggestion', 'suggestedFront', 'suggestedBack'],
+};
+const FACTCHECK_SYSTEM =
+  'You are a fact-checker for study flashcards. Given a card (question = front, answer = back), judge whether ' +
+  'the answer is factually accurate and precise, and give 1-3 sentences of useful supporting context. If the ' +
+  'answer is wrong, incomplete, or imprecise, set hasSuggestion true and provide a corrected front and back; ' +
+  'otherwise set hasSuggestion false and echo the original front and back. Base everything on well-established, ' +
+  'verifiable facts.';
+
+app.post('/api/cards/:id/factcheck', requireUser, async (req, res) => {
+  if (!anthropic) return res.status(503).json({ ok: false, error: 'AI is not configured on this server yet.' });
+  const { data: card, error } = await req.db.from('cards').select('front, back').eq('id', req.params.id).maybeSingle();
+  if (error || !card) return res.status(404).json({ ok: false, error: 'Card not found.' });
+
+  let result;
+  try {
+    const msg = await anthropic.messages.create({
+      model: AI_MODEL,
+      max_tokens: 2000,
+      system: FACTCHECK_SYSTEM,
+      output_config: { format: { type: 'json_schema', schema: FACTCHECK_SCHEMA }, effort: 'low' },
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'Question (front): ' + card.front + '\nAnswer (back): ' + card.back }] }],
+    });
+    if (msg.stop_reason === 'refusal') return res.status(422).json({ ok: false, error: 'The AI declined to check this card.' });
+    const block = (msg.content || []).find((b) => b.type === 'text');
+    result = JSON.parse(block?.text || '{}');
+  } catch (ex) {
+    console.error('[factcheck] failed:', ex?.message);
+    return res.status(502).json({ ok: false, error: 'Fact-check failed. Please try again.' });
+  }
+  return res.json({
+    ok: true,
+    accurate: !!result.accurate,
+    context: String(result.context || ''),
+    hasSuggestion: !!result.hasSuggestion,
+    suggestedFront: String(result.suggestedFront || ''),
+    suggestedBack: String(result.suggestedBack || ''),
+  });
+});
+
 // Grade a review with SM-2. grade: 0 Again, 3 Hard, 4 Good, 5 Easy.
 app.post('/api/cards/:id/review', requireUser, async (req, res) => {
   const grade = Number(req.body?.grade);
@@ -567,13 +653,15 @@ app.post('/api/cards/:id/review', requireUser, async (req, res) => {
   return res.json({ ok: true, interval_days: interval, due_at: dueAt });
 });
 
-// Global review queue: every due card across all of the caller's decks.
+// Review queue: due cards across all decks, or one deck with ?deckId=.
 app.get('/api/review/due', requireUser, async (req, res) => {
   const nowIso = new Date().toISOString();
-  const { data, error } = await req.db
+  let q = req.db
     .from('cards')
     .select('id, card_type, front, back, hint, due_at, decks!inner(title)')
-    .lte('due_at', nowIso)
+    .lte('due_at', nowIso);
+  if (typeof req.query.deckId === 'string' && req.query.deckId) q = q.eq('deck_id', req.query.deckId);
+  const { data, error } = await q
     .order('due_at', { ascending: true })
     .limit(300);
   if (error) {

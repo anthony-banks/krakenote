@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import Anthropic from '@anthropic-ai/sdk';
 import mammoth from 'mammoth';
 import { parseOffice } from 'officeparser';
+import { fsrs, generatorParameters, Rating } from 'ts-fsrs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -608,49 +609,71 @@ app.post('/api/cards/:id/factcheck', requireUser, async (req, res) => {
   });
 });
 
-// Grade a review with SM-2. grade: 0 Again, 3 Hard, 4 Good, 5 Easy.
+// FSRS scheduler (replaces SM-2). Cards migrated from SM-2 arrive as state=New
+// and re-initialize on their next review. UI grade -> FSRS Rating mapping below.
+const scheduler = fsrs(generatorParameters({ enable_fuzz: true }));
+const GRADE_TO_RATING = { 0: Rating.Again, 3: Rating.Hard, 4: Rating.Good, 5: Rating.Easy };
+
+// Grade a review with FSRS. grade: 0 Again, 3 Hard, 4 Good, 5 Easy.
 app.post('/api/cards/:id/review', requireUser, async (req, res) => {
   const grade = Number(req.body?.grade);
   if (![0, 3, 4, 5].includes(grade)) {
     return res.status(400).json({ ok: false, error: 'Invalid grade.' });
   }
-  const { data: card, error } = await req.db
+  const { data: row, error } = await req.db
     .from('cards')
-    .select('id, deck_id, ease, interval_days, repetitions')
+    .select('id, deck_id, due_at, stability, difficulty, interval_days, repetitions, lapses, learning_steps, fsrs_state, last_review')
     .eq('id', req.params.id)
     .maybeSingle();
-  if (error || !card) return res.status(404).json({ ok: false, error: 'Card not found.' });
+  if (error || !row) return res.status(404).json({ ok: false, error: 'Card not found.' });
 
-  let ease = card.ease;
-  let reps = card.repetitions;
-  let interval = card.interval_days;
+  const now = new Date();
+  // Reconstruct the FSRS card from stored state (New cards start with zeros).
+  const card = {
+    due: row.due_at ? new Date(row.due_at) : now,
+    stability: row.stability ?? 0,
+    difficulty: row.difficulty ?? 0,
+    elapsed_days: 0,
+    scheduled_days: row.interval_days ?? 0,
+    reps: row.repetitions ?? 0,
+    lapses: row.lapses ?? 0,
+    learning_steps: row.learning_steps ?? 0,
+    state: row.fsrs_state ?? 0,
+    last_review: row.last_review ? new Date(row.last_review) : undefined,
+  };
 
-  if (grade < 3) {
-    reps = 0;
-    interval = 1;
-  } else {
-    reps += 1;
-    if (reps === 1) interval = 1;
-    else if (reps === 2) interval = 6;
-    else interval = Math.round(interval * ease);
+  let next;
+  try {
+    next = scheduler.next(card, now, GRADE_TO_RATING[grade]).card;
+  } catch (ex) {
+    console.error('[review] fsrs schedule failed:', ex?.message);
+    return res.status(500).json({ ok: false, error: 'Could not schedule the review.' });
   }
-  ease = ease + (0.1 - (5 - grade) * (0.08 + (5 - grade) * 0.02));
-  if (ease < 1.3) ease = 1.3;
 
-  const dueAt = new Date(Date.now() + interval * 86400000).toISOString();
+  const dueAt = new Date(next.due).toISOString();
   const { error: upErr } = await req.db
     .from('cards')
-    .update({ ease, interval_days: interval, repetitions: reps, due_at: dueAt })
-    .eq('id', card.id);
+    .update({
+      due_at: dueAt,
+      stability: next.stability,
+      difficulty: next.difficulty,
+      interval_days: next.scheduled_days,
+      repetitions: next.reps,
+      lapses: next.lapses,
+      learning_steps: next.learning_steps,
+      fsrs_state: next.state,
+      last_review: new Date(next.last_review).toISOString(),
+    })
+    .eq('id', row.id);
   if (upErr) {
     console.error('[review] update failed:', upErr.message);
     return res.status(500).json({ ok: false, error: 'Could not save the review.' });
   }
-  // Log the review for streaks / progress (best-effort — never fail the review on this).
-  await req.db.from('reviews').insert({ user_id: req.user.id, card_id: card.id, deck_id: card.deck_id, grade })
+  // Log the review for streaks / progress (best-effort).
+  await req.db.from('reviews').insert({ user_id: req.user.id, card_id: row.id, deck_id: row.deck_id, grade })
     .then(({ error: e }) => { if (e) console.error('[review] log failed:', e.message); });
 
-  return res.json({ ok: true, interval_days: interval, due_at: dueAt });
+  return res.json({ ok: true, interval_days: next.scheduled_days, due_at: dueAt });
 });
 
 // Review queue: due cards across all decks, or one deck with ?deckId=.

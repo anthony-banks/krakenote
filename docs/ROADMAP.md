@@ -1,7 +1,13 @@
 # Krakenote build roadmap
 
 Confirmed backlog from the 2026-07-25 review session. Ordered into batches.
-Status: ⬜ todo · �build in progress · ✅ done
+Status: ⬜ todo · 🔨 build in progress · ✅ done
+
+**As of 2026-07-29: Batches 1–5 are all complete and live on staging.** The web
+app is feature-complete for this scope; API documented in `docs/API.md`. Next
+workstream is the iOS companion (builds against the same backend). Pre-launch
+hardening (signup security, generation cost cap, public `/app` link, security
+review) remains before opening the web app to real users — tracked below.
 
 ## Decisions locked
 - **FSRS** replaces SM-2 (ts-fsrs). ~20–30% fewer reviews; self-tuning.

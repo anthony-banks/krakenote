@@ -1,6 +1,9 @@
 import express from 'express';
 import { createClient } from '@supabase/supabase-js';
 import Anthropic from '@anthropic-ai/sdk';
+import mammoth from 'mammoth';
+import { parseOffice } from 'officeparser';
+import { fsrs, generatorParameters, Rating } from 'ts-fsrs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -302,6 +305,86 @@ const CARD_SCHEMA = {
   required: ['summary', 'cards'],
 };
 
+// ── Ingestion: turn whatever was submitted into Claude message content ───────
+// Supports pasted text, a URL, PDF (document block), image (vision), and
+// docx/pptx (parsed server-side to text). Throws a user-facing message on bad input.
+const IMG_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
+const DOCX_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+const PPTX_TYPE = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+const GEN_PROMPT = 'Generate study flashcards and a summary from this material.';
+
+async function fetchArticle(rawUrl) {
+  let u;
+  try { u = new URL(rawUrl); } catch { throw new Error('That does not look like a valid URL.'); }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new Error('Only http(s) links are supported.');
+  let resp;
+  try {
+    resp = await fetch(u.href, { headers: { 'User-Agent': 'KrakenoteBot/1.0' }, signal: AbortSignal.timeout(15000) });
+  } catch { throw new Error('Could not reach that link.'); }
+  if (!resp.ok) throw new Error('Could not fetch that link (HTTP ' + resp.status + ').');
+  const html = (await resp.text()).slice(0, 3_000_000);
+  // Crude readability: drop scripts/styles, strip tags, decode common entities.
+  const text = html
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>').replace(/&#39;/g, "'").replace(/&quot;/g, '"')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (text.length < 200) throw new Error('Could not extract readable text from that page.');
+  return text;
+}
+
+async function buildIngest(body) {
+  const file = body.file;
+  const text = typeof body.text === 'string' ? body.text : '';
+  const url = typeof body.url === 'string' ? body.url.trim() : '';
+
+  const asText = (raw, kind, filename) => {
+    const clean = (raw || '').slice(0, 60000).trim();
+    if (!clean) throw new Error('There was nothing to generate from.');
+    return { userContent: [{ type: 'text', text: 'Study material:\n\n' + clean }], sourceKind: kind, filename, charCount: clean.length };
+  };
+
+  if (file && file.dataBase64) {
+    const mt = file.mediaType || '';
+    const name = typeof file.name === 'string' ? file.name.slice(0, 200) : null;
+    if (mt === 'application/pdf') {
+      return {
+        userContent: [
+          { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: file.dataBase64 } },
+          { type: 'text', text: GEN_PROMPT },
+        ],
+        sourceKind: 'pdf', filename: name || 'document.pdf', charCount: 0,
+      };
+    }
+    if (IMG_TYPES.has(mt)) {
+      return {
+        userContent: [
+          { type: 'image', source: { type: 'base64', media_type: mt, data: file.dataBase64 } },
+          { type: 'text', text: GEN_PROMPT + ' Read any text visible in the image.' },
+        ],
+        sourceKind: 'image', filename: name || 'image', charCount: 0,
+      };
+    }
+    const buf = Buffer.from(file.dataBase64, 'base64');
+    if (mt === DOCX_TYPE || /\.docx$/i.test(name || '')) {
+      const { value } = await mammoth.extractRawText({ buffer: buf });
+      return asText(value, 'docx', name);
+    }
+    if (mt === PPTX_TYPE || /\.pptx$/i.test(name || '')) {
+      const value = await parseOffice(buf);
+      return asText(value, 'pptx', name);
+    }
+    throw new Error('Unsupported file type. Use PDF, image, .docx, .pptx, .txt, or .md.');
+  }
+
+  if (url) return asText(await fetchArticle(url), 'url', url);
+  if (text) return asText(text, 'text', null);
+  throw new Error('Provide notes, a link, or a file to generate from.');
+}
+
 // Strict grounding: cards come ONLY from the supplied material. Two card kinds.
 const GEN_SYSTEM =
   "You are Krakenote's study-material generator. Use ONLY facts explicitly present in the provided " +
@@ -323,39 +406,26 @@ app.post('/api/decks/:id/generate', requireUser, async (req, res) => {
   const { data: deck, error: deckErr } = await req.db.from('decks').select('id').eq('id', deckId).maybeSingle();
   if (deckErr || !deck) return res.status(404).json({ ok: false, error: 'Deck not found.' });
 
-  const file = req.body?.file;
-  const text = typeof req.body?.text === 'string' ? req.body.text : '';
-
-  let userContent;
-  let sourceKind;
-  let filename = null;
-  let extractedText = null;
-  let charCount = 0;
-
-  if (file && file.dataBase64 && file.mediaType === 'application/pdf') {
-    // PDFs go straight to the model as a document block — no server-side parsing.
-    userContent = [
-      { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: file.dataBase64 } },
-      { type: 'text', text: 'Generate study flashcards and a summary from this document.' },
-    ];
-    sourceKind = 'pdf';
-    filename = typeof file.name === 'string' ? file.name.slice(0, 200) : 'document.pdf';
-  } else {
-    const clean = (text || '').slice(0, 60000).trim(); // bound cost/latency
-    if (!clean) return res.status(400).json({ ok: false, error: 'Provide some notes or a PDF to generate from.' });
-    userContent = [{ type: 'text', text: 'Study material:\n\n' + clean }];
-    sourceKind = file ? 'file' : 'text';
-    filename = file && typeof file.name === 'string' ? file.name.slice(0, 200) : null;
-    extractedText = clean;
-    charCount = clean.length;
+  let userContent, sourceKind, filename, charCount;
+  try {
+    ({ userContent, sourceKind, filename, charCount } = await buildIngest(req.body || {}));
+  } catch (ex) {
+    return res.status(400).json({ ok: false, error: ex.message || 'Could not read that input.' });
   }
+
+  // Card-type control: 'basic' | 'cloze' | 'mix' (default).
+  const ct = req.body?.cardType;
+  const typeInstr =
+    ct === 'basic' ? ' Produce ONLY basic question/answer cards — no cloze.'
+    : ct === 'cloze' ? ' Produce ONLY cloze fill-in-the-blank cards.'
+    : ' Produce a mix of basic and cloze cards — aim for roughly one-third cloze.';
 
   let result;
   try {
     const msg = await anthropic.messages.create({
       model: AI_MODEL,
       max_tokens: 16000,
-      system: GEN_SYSTEM,
+      system: GEN_SYSTEM + typeInstr,
       output_config: { format: { type: 'json_schema', schema: CARD_SCHEMA }, effort: 'low' },
       messages: [{ role: 'user', content: userContent }],
     });
@@ -436,7 +506,7 @@ app.post('/api/decks/:id/cards', requireUser, async (req, res) => {
 app.get('/api/decks/:id/cards', requireUser, async (req, res) => {
   const { data, error } = await req.db
     .from('cards')
-    .select('id, card_type, front, back, hint, ease, interval_days, repetitions, due_at')
+    .select('id, card_type, front, back, hint, ease, interval_days, repetitions, due_at, sort_order')
     .eq('deck_id', req.params.id)
     .order('created_at', { ascending: true });
   if (error) {
@@ -446,45 +516,267 @@ app.get('/api/decks/:id/cards', requireUser, async (req, res) => {
   return res.json({ ok: true, cards: data || [] });
 });
 
-// Grade a review with SM-2. grade: 0 Again, 3 Hard, 4 Good, 5 Easy.
+// What a deck was built from — the sources + AI summaries, newest first.
+app.get('/api/decks/:id/sources', requireUser, async (req, res) => {
+  const { data, error } = await req.db
+    .from('sources')
+    .select('id, kind, filename, summary, created_at')
+    .eq('deck_id', req.params.id)
+    .order('created_at', { ascending: false });
+  if (error) {
+    console.error('[sources] list failed:', error.message);
+    return res.status(500).json({ ok: false, error: 'Could not load the deck overview.' });
+  }
+  return res.json({ ok: true, sources: data || [] });
+});
+
+// Edit a single card (front/back/hint/type). RLS scopes it to the owner.
+app.patch('/api/cards/:id', requireUser, async (req, res) => {
+  const patch = {};
+  if (typeof req.body?.front === 'string') patch.front = req.body.front.trim().slice(0, 2000);
+  if (typeof req.body?.back === 'string') patch.back = req.body.back.trim().slice(0, 4000);
+  if (typeof req.body?.hint === 'string') patch.hint = req.body.hint.slice(0, 500) || null;
+  if (req.body?.type === 'basic' || req.body?.type === 'cloze') patch.card_type = req.body.type;
+  if (!Object.keys(patch).length) return res.status(400).json({ ok: false, error: 'Nothing to update.' });
+  if (patch.front === '' || patch.back === '') return res.status(400).json({ ok: false, error: 'Front and back cannot be empty.' });
+  const { error } = await req.db.from('cards').update(patch).eq('id', req.params.id);
+  if (error) {
+    console.error('[cards] update failed:', error.message);
+    return res.status(500).json({ ok: false, error: 'Could not update the card.' });
+  }
+  return res.json({ ok: true });
+});
+
+// Delete a single card.
+app.delete('/api/cards/:id', requireUser, async (req, res) => {
+  const { error } = await req.db.from('cards').delete().eq('id', req.params.id);
+  if (error) {
+    console.error('[cards] delete failed:', error.message);
+    return res.status(500).json({ ok: false, error: 'Could not delete the card.' });
+  }
+  return res.json({ ok: true });
+});
+
+// Fact-check a card against general knowledge (NOT strict-from-source — this is
+// the deliberate opposite of generation: verify the card is actually correct).
+const FACTCHECK_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    accurate: { type: 'boolean' },
+    context: { type: 'string' },
+    hasSuggestion: { type: 'boolean' },
+    suggestedFront: { type: 'string' },
+    suggestedBack: { type: 'string' },
+  },
+  required: ['accurate', 'context', 'hasSuggestion', 'suggestedFront', 'suggestedBack'],
+};
+const FACTCHECK_SYSTEM =
+  'You are a fact-checker for study flashcards. Given a card (question = front, answer = back), judge whether ' +
+  'the answer is factually accurate and precise, and give 1-3 sentences of useful supporting context. If the ' +
+  'answer is wrong, incomplete, or imprecise, set hasSuggestion true and provide a corrected front and back; ' +
+  'otherwise set hasSuggestion false and echo the original front and back. Base everything on well-established, ' +
+  'verifiable facts.';
+
+app.post('/api/cards/:id/factcheck', requireUser, async (req, res) => {
+  if (!anthropic) return res.status(503).json({ ok: false, error: 'AI is not configured on this server yet.' });
+  const { data: card, error } = await req.db.from('cards').select('front, back').eq('id', req.params.id).maybeSingle();
+  if (error || !card) return res.status(404).json({ ok: false, error: 'Card not found.' });
+
+  let result;
+  try {
+    const msg = await anthropic.messages.create({
+      model: AI_MODEL,
+      max_tokens: 2000,
+      system: FACTCHECK_SYSTEM,
+      output_config: { format: { type: 'json_schema', schema: FACTCHECK_SCHEMA }, effort: 'low' },
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'Question (front): ' + card.front + '\nAnswer (back): ' + card.back }] }],
+    });
+    if (msg.stop_reason === 'refusal') return res.status(422).json({ ok: false, error: 'The AI declined to check this card.' });
+    const block = (msg.content || []).find((b) => b.type === 'text');
+    result = JSON.parse(block?.text || '{}');
+  } catch (ex) {
+    console.error('[factcheck] failed:', ex?.message);
+    return res.status(502).json({ ok: false, error: 'Fact-check failed. Please try again.' });
+  }
+  return res.json({
+    ok: true,
+    accurate: !!result.accurate,
+    context: String(result.context || ''),
+    hasSuggestion: !!result.hasSuggestion,
+    suggestedFront: String(result.suggestedFront || ''),
+    suggestedBack: String(result.suggestedBack || ''),
+  });
+});
+
+// FSRS scheduler (replaces SM-2). Cards migrated from SM-2 arrive as state=New
+// and re-initialize on their next review. UI grade -> FSRS Rating mapping below.
+const scheduler = fsrs(generatorParameters({ enable_fuzz: true }));
+const GRADE_TO_RATING = { 0: Rating.Again, 3: Rating.Hard, 4: Rating.Good, 5: Rating.Easy };
+
+// Grade a review with FSRS. grade: 0 Again, 3 Hard, 4 Good, 5 Easy.
 app.post('/api/cards/:id/review', requireUser, async (req, res) => {
   const grade = Number(req.body?.grade);
   if (![0, 3, 4, 5].includes(grade)) {
     return res.status(400).json({ ok: false, error: 'Invalid grade.' });
   }
-  const { data: card, error } = await req.db
+  const { data: row, error } = await req.db
     .from('cards')
-    .select('id, ease, interval_days, repetitions')
+    .select('id, deck_id, due_at, stability, difficulty, interval_days, repetitions, lapses, learning_steps, fsrs_state, last_review')
     .eq('id', req.params.id)
     .maybeSingle();
-  if (error || !card) return res.status(404).json({ ok: false, error: 'Card not found.' });
+  if (error || !row) return res.status(404).json({ ok: false, error: 'Card not found.' });
 
-  let ease = card.ease;
-  let reps = card.repetitions;
-  let interval = card.interval_days;
+  const now = new Date();
+  // Reconstruct the FSRS card from stored state (New cards start with zeros).
+  const card = {
+    due: row.due_at ? new Date(row.due_at) : now,
+    stability: row.stability ?? 0,
+    difficulty: row.difficulty ?? 0,
+    elapsed_days: 0,
+    scheduled_days: row.interval_days ?? 0,
+    reps: row.repetitions ?? 0,
+    lapses: row.lapses ?? 0,
+    learning_steps: row.learning_steps ?? 0,
+    state: row.fsrs_state ?? 0,
+    last_review: row.last_review ? new Date(row.last_review) : undefined,
+  };
 
-  if (grade < 3) {
-    reps = 0;
-    interval = 1;
-  } else {
-    reps += 1;
-    if (reps === 1) interval = 1;
-    else if (reps === 2) interval = 6;
-    else interval = Math.round(interval * ease);
+  let next;
+  try {
+    next = scheduler.next(card, now, GRADE_TO_RATING[grade]).card;
+  } catch (ex) {
+    console.error('[review] fsrs schedule failed:', ex?.message);
+    return res.status(500).json({ ok: false, error: 'Could not schedule the review.' });
   }
-  ease = ease + (0.1 - (5 - grade) * (0.08 + (5 - grade) * 0.02));
-  if (ease < 1.3) ease = 1.3;
 
-  const dueAt = new Date(Date.now() + interval * 86400000).toISOString();
+  const dueAt = new Date(next.due).toISOString();
   const { error: upErr } = await req.db
     .from('cards')
-    .update({ ease, interval_days: interval, repetitions: reps, due_at: dueAt })
-    .eq('id', card.id);
+    .update({
+      due_at: dueAt,
+      stability: next.stability,
+      difficulty: next.difficulty,
+      interval_days: next.scheduled_days,
+      repetitions: next.reps,
+      lapses: next.lapses,
+      learning_steps: next.learning_steps,
+      fsrs_state: next.state,
+      last_review: new Date(next.last_review).toISOString(),
+    })
+    .eq('id', row.id);
   if (upErr) {
     console.error('[review] update failed:', upErr.message);
     return res.status(500).json({ ok: false, error: 'Could not save the review.' });
   }
-  return res.json({ ok: true, interval_days: interval, due_at: dueAt });
+  // Log the review for streaks / progress (best-effort).
+  await req.db.from('reviews').insert({ user_id: req.user.id, card_id: row.id, deck_id: row.deck_id, grade })
+    .then(({ error: e }) => { if (e) console.error('[review] log failed:', e.message); });
+
+  return res.json({ ok: true, interval_days: next.scheduled_days, due_at: dueAt });
+});
+
+// Review queue: due cards across all decks, or one deck with ?deckId=.
+app.get('/api/review/due', requireUser, async (req, res) => {
+  const nowIso = new Date().toISOString();
+  let q = req.db
+    .from('cards')
+    .select('id, card_type, front, back, hint, due_at, decks!inner(title)')
+    .lte('due_at', nowIso);
+  if (typeof req.query.deckId === 'string' && req.query.deckId) q = q.eq('deck_id', req.query.deckId);
+  const { data, error } = await q
+    .order('due_at', { ascending: true })
+    .limit(300);
+  if (error) {
+    console.error('[review] due query failed:', error.message);
+    return res.status(500).json({ ok: false, error: 'Could not load due cards.' });
+  }
+  const cards = (data || []).map((c) => ({
+    id: c.id, card_type: c.card_type, front: c.front, back: c.back, hint: c.hint,
+    deckTitle: (c.decks && c.decks.title) || '',
+  }));
+  return res.json({ ok: true, cards });
+});
+
+// Dashboard + Progress numbers (all real — no fabricated values).
+app.get('/api/stats', requireUser, async (req, res) => {
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const dayStr = (d) => d.toISOString().slice(0, 10);
+
+  const [decks, cards, due] = await Promise.all([
+    req.db.from('decks').select('id', { count: 'exact', head: true }),
+    req.db.from('cards').select('id', { count: 'exact', head: true }),
+    req.db.from('cards').select('id', { count: 'exact', head: true }).lte('due_at', nowIso),
+  ]);
+  const { data: revs, error: revErr } = await req.db
+    .from('reviews').select('grade, reviewed_at').order('reviewed_at', { ascending: false }).limit(3000);
+  if (revErr) console.error('[stats] reviews query failed:', revErr.message);
+
+  const rows = revs || [];
+  const days = new Set(rows.map((r) => r.reviewed_at.slice(0, 10)));
+  // Streak: consecutive days with a review, ending today (or yesterday as grace).
+  let streak = 0;
+  const cur = new Date(now);
+  if (!days.has(dayStr(cur))) cur.setUTCDate(cur.getUTCDate() - 1);
+  while (days.has(dayStr(cur))) { streak++; cur.setUTCDate(cur.getUTCDate() - 1); }
+
+  const today = dayStr(now);
+  const weekAgo = new Date(now.getTime() - 7 * 86400000).toISOString();
+  const reviewedToday = rows.filter((r) => r.reviewed_at.slice(0, 10) === today).length;
+  const reviewed7d = rows.filter((r) => r.reviewed_at >= weekAgo).length;
+  const good = rows.filter((r) => r.grade >= 4).length;
+  const retentionPct = rows.length ? Math.round((good / rows.length) * 100) : null;
+
+  return res.json({
+    ok: true,
+    decks: decks.count || 0,
+    cards: cards.count || 0,
+    due: due.count || 0,
+    streak,
+    reviewedToday,
+    reviewed7d,
+    totalReviews: rows.length,
+    retentionPct,
+  });
+});
+
+// Profile (first/last name). Email comes from the verified token, not the table.
+app.get('/api/profile', requireUser, async (req, res) => {
+  const { data, error } = await req.db.from('profiles').select('first_name, last_name').eq('id', req.user.id).maybeSingle();
+  if (error) {
+    console.error('[profile] load failed:', error.message);
+    return res.status(500).json({ ok: false, error: 'Could not load your profile.' });
+  }
+  return res.json({ ok: true, email: req.user.email, firstName: data?.first_name || '', lastName: data?.last_name || '' });
+});
+
+app.patch('/api/profile', requireUser, async (req, res) => {
+  const firstName = typeof req.body?.firstName === 'string' ? req.body.firstName.trim().slice(0, 80) : '';
+  const lastName = typeof req.body?.lastName === 'string' ? req.body.lastName.trim().slice(0, 80) : '';
+  const { error } = await req.db
+    .from('profiles')
+    .upsert({ id: req.user.id, first_name: firstName || null, last_name: lastName || null, updated_at: new Date().toISOString() }, { onConflict: 'id' });
+  if (error) {
+    console.error('[profile] save failed:', error.message);
+    return res.status(500).json({ ok: false, error: 'Could not save your profile.' });
+  }
+  return res.json({ ok: true });
+});
+
+// Manual card reorder: persist 1-based positions for the given ordered ids.
+app.post('/api/decks/:id/cards/reorder', requireUser, async (req, res) => {
+  const ids = Array.isArray(req.body?.orderedIds) ? req.body.orderedIds.slice(0, 1000) : [];
+  if (!ids.length) return res.status(400).json({ ok: false, error: 'No card order provided.' });
+  // One scoped update per card (RLS ensures only the caller's cards in this deck change).
+  for (let i = 0; i < ids.length; i++) {
+    const { error } = await req.db.from('cards').update({ sort_order: i + 1 }).eq('id', ids[i]).eq('deck_id', req.params.id);
+    if (error) {
+      console.error('[cards] reorder failed:', error.message);
+      return res.status(500).json({ ok: false, error: 'Could not save the new order.' });
+    }
+  }
+  return res.json({ ok: true });
 });
 
 // ── Admin dashboard (Supabase Auth, superuser-gated, READ-ONLY) ─────────────

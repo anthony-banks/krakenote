@@ -506,7 +506,7 @@ app.post('/api/decks/:id/cards', requireUser, async (req, res) => {
 app.get('/api/decks/:id/cards', requireUser, async (req, res) => {
   const { data, error } = await req.db
     .from('cards')
-    .select('id, card_type, front, back, hint, ease, interval_days, repetitions, due_at')
+    .select('id, card_type, front, back, hint, ease, interval_days, repetitions, due_at, sort_order')
     .eq('deck_id', req.params.id)
     .order('created_at', { ascending: true });
   if (error) {
@@ -739,6 +739,44 @@ app.get('/api/stats', requireUser, async (req, res) => {
     totalReviews: rows.length,
     retentionPct,
   });
+});
+
+// Profile (first/last name). Email comes from the verified token, not the table.
+app.get('/api/profile', requireUser, async (req, res) => {
+  const { data, error } = await req.db.from('profiles').select('first_name, last_name').eq('id', req.user.id).maybeSingle();
+  if (error) {
+    console.error('[profile] load failed:', error.message);
+    return res.status(500).json({ ok: false, error: 'Could not load your profile.' });
+  }
+  return res.json({ ok: true, email: req.user.email, firstName: data?.first_name || '', lastName: data?.last_name || '' });
+});
+
+app.patch('/api/profile', requireUser, async (req, res) => {
+  const firstName = typeof req.body?.firstName === 'string' ? req.body.firstName.trim().slice(0, 80) : '';
+  const lastName = typeof req.body?.lastName === 'string' ? req.body.lastName.trim().slice(0, 80) : '';
+  const { error } = await req.db
+    .from('profiles')
+    .upsert({ id: req.user.id, first_name: firstName || null, last_name: lastName || null, updated_at: new Date().toISOString() }, { onConflict: 'id' });
+  if (error) {
+    console.error('[profile] save failed:', error.message);
+    return res.status(500).json({ ok: false, error: 'Could not save your profile.' });
+  }
+  return res.json({ ok: true });
+});
+
+// Manual card reorder: persist 1-based positions for the given ordered ids.
+app.post('/api/decks/:id/cards/reorder', requireUser, async (req, res) => {
+  const ids = Array.isArray(req.body?.orderedIds) ? req.body.orderedIds.slice(0, 1000) : [];
+  if (!ids.length) return res.status(400).json({ ok: false, error: 'No card order provided.' });
+  // One scoped update per card (RLS ensures only the caller's cards in this deck change).
+  for (let i = 0; i < ids.length; i++) {
+    const { error } = await req.db.from('cards').update({ sort_order: i + 1 }).eq('id', ids[i]).eq('deck_id', req.params.id);
+    if (error) {
+      console.error('[cards] reorder failed:', error.message);
+      return res.status(500).json({ ok: false, error: 'Could not save the new order.' });
+    }
+  }
+  return res.json({ ok: true });
 });
 
 // ── Admin dashboard (Supabase Auth, superuser-gated, READ-ONLY) ─────────────

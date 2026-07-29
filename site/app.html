@@ -271,6 +271,10 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   .acct-h{font-family:var(--head);font-weight:700;font-size:15px;margin-bottom:10px}
   .acct-body input{width:100%;font-family:var(--body);font-size:15px;padding:12px 14px;border-radius:12px;border:1.5px solid var(--border);background:var(--surface-2);color:var(--text);outline:none;margin-bottom:12px}
   .acct-body input:focus{border-color:var(--accent)}
+  .wip-card{background:var(--surface-2);border:1px solid var(--border);border-radius:14px;padding:16px}
+  .wip-badge{font-family:var(--head);font-weight:700;font-size:10px;letter-spacing:.5px;text-transform:uppercase;padding:3px 9px;border-radius:999px;background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 34%,transparent)}
+  .card-row.draggable{cursor:grab}
+  .card-row.drag-over{border-top:2px solid var(--accent)}
 
   /* Capture extras */
   .gen-url{font-family:var(--body);font-size:15px;padding:12px 14px;border-radius:12px;border:1.5px solid var(--border);background:var(--surface-2);color:var(--text);outline:none}
@@ -455,10 +459,22 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       <div class="acct-body">
         <div class="acct-row"><span class="acct-label">Signed in as</span><span id="acctEmail">—</span></div>
         <div class="acct-sep"></div>
+        <h3 class="acct-h">Your name</h3>
+        <input type="text" id="acctFirst" placeholder="First name" autocomplete="given-name" />
+        <input type="text" id="acctLast" placeholder="Last name" autocomplete="family-name" />
+        <div class="msg" id="acctNameMsg"></div>
+        <button class="btn btn-primary" id="acctNameBtn" type="button">Save name</button>
+        <div class="acct-sep"></div>
         <h3 class="acct-h">Change password</h3>
         <input type="password" id="acctPw" placeholder="New password — at least 8 characters" autocomplete="new-password" />
         <div class="msg" id="acctMsg"></div>
         <button class="btn btn-primary" id="acctPwBtn" type="button">Update password</button>
+        <div class="acct-sep"></div>
+        <div class="wip-card">
+          <span class="wip-badge">Coming soon</span>
+          <h3 class="acct-h" style="margin-top:10px">Billing &amp; subscription</h3>
+          <p style="color:var(--muted);font-size:14px;line-height:1.5">Krakenote Pro — unlimited AI generation, the tutor, and exam mode. Subscription management and payment will live here.</p>
+        </div>
         <div class="acct-sep"></div>
         <button class="linkbtn" id="acctSignout" type="button">Sign out</button>
       </div>
@@ -508,7 +524,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
           <label><input type="radio" name="cardType" value="cloze" /> Cloze</label>
         </div>
         <div class="row">
-          <input type="file" id="genFile" accept=".pdf,.txt,.md,.docx,.pptx,image/*,application/pdf,text/plain,text/markdown" />
+          <input type="file" id="genFile" multiple accept=".pdf,.txt,.md,.docx,.pptx,image/*,application/pdf,text/plain,text/markdown" />
           <button class="btn btn-primary" id="genBtn" type="button">✨ Generate cards</button>
         </div>
         <div class="drop-hint" id="dropHint">Tip: drag a PDF, image, .docx, or .pptx onto this box.</div>
@@ -534,12 +550,16 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       </div>
       <div class="cards-toolbar hidden" id="cardsToolbar">
         <button class="btn btn-primary" id="addCardBtn" type="button">+ Add card</button>
+        <button class="linkbtn" id="importCsvBtn" type="button">Import CSV</button>
+        <button class="linkbtn" id="exportCsvBtn" type="button">Export CSV</button>
+        <input type="file" id="csvFile" accept=".csv,text/csv" style="display:none" />
         <label class="sort-label">Sort
           <select id="cardSort">
             <option value="created">Newest</option>
             <option value="az">A–Z</option>
             <option value="due">Due date</option>
             <option value="type">Card type</option>
+            <option value="manual">Custom order</option>
           </select>
         </label>
       </div>
@@ -980,7 +1000,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     Object.keys(VIEW_PANELS).forEach(function(k){ $(VIEW_PANELS[k]).classList.add('hidden'); });
     $('deckDetailPanel').classList.remove('hidden');
     $('deckDetailTitle').textContent = d.title;
-    $('genText').value = ''; $('genFile').value = ''; $('genUrl').value = ''; droppedFile = null;
+    $('genText').value = ''; $('genFile').value = ''; $('genUrl').value = ''; droppedFiles = [];
     $('dropHint').textContent = 'Tip: drag a PDF, image, .docx, or .pptx onto this box.';
     msgOn('genMsg', null, ''); $('genSummary').classList.add('hidden'); $('genPreview').classList.add('hidden');
     $('deckOverview').classList.add('hidden');
@@ -1005,7 +1025,73 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     if (cardSortMode === 'az') arr.sort(function(a, b){ return (a.front || '').localeCompare(b.front || ''); });
     else if (cardSortMode === 'due') arr.sort(function(a, b){ return new Date(a.due_at) - new Date(b.due_at); });
     else if (cardSortMode === 'type') arr.sort(function(a, b){ return (a.card_type || '').localeCompare(b.card_type || ''); });
+    else if (cardSortMode === 'manual') arr.sort(function(a, b){ return (a.sort_order || 0) - (b.sort_order || 0); }); // stable; unset (0) keep server order
     return arr; // 'created' keeps server order (created_at asc)
+  }
+
+  // Manual drag-reorder: move dragged card to the drop target's position, persist.
+  var dragCardId = null;
+  function onCardDrop(targetId){
+    if (!dragCardId || dragCardId === targetId) return;
+    var order = sortedCards().map(function(c){ return c.id; });
+    var from = order.indexOf(dragCardId), to = order.indexOf(targetId);
+    if (from < 0 || to < 0) return;
+    order.splice(to, 0, order.splice(from, 1)[0]);
+    order.forEach(function(id, i){ var c = cardsCache.find(function(x){ return x.id === id; }); if (c) c.sort_order = i + 1; });
+    renderCards();
+    api('/api/decks/' + encodeURIComponent(currentDeck.id) + '/cards/reorder', { method:'POST', body: JSON.stringify({ orderedIds: order }) });
+    dragCardId = null;
+  }
+
+  // ── CSV import / export ──
+  function csvCell(v){ v = String(v == null ? '' : v); return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
+  function exportCsv(){
+    var rows = [['front', 'back', 'hint', 'type']];
+    sortedCards().forEach(function(c){ rows.push([c.front, c.back, c.hint || '', c.card_type || 'basic']); });
+    var csv = rows.map(function(r){ return r.map(csvCell).join(','); }).join('\r\n') + '\r\n';
+    var blob = new Blob([csv], { type: 'text/csv' });
+    var a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = ((currentDeck && currentDeck.title) || 'deck').replace(/[^\w\- ]+/g, '') + '.csv';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(a.href);
+  }
+  function parseCsvRows(text){
+    var rows = [], row = [], cur = '', inQ = false;
+    for (var i = 0; i < text.length; i++){
+      var ch = text[i];
+      if (inQ){ if (ch === '"'){ if (text[i + 1] === '"'){ cur += '"'; i++; } else inQ = false; } else cur += ch; }
+      else if (ch === '"') inQ = true;
+      else if (ch === ',') { row.push(cur); cur = ''; }
+      else if (ch === '\n'){ row.push(cur); rows.push(row); row = []; cur = ''; }
+      else if (ch !== '\r') cur += ch;
+    }
+    if (cur !== '' || row.length){ row.push(cur); rows.push(row); }
+    return rows.filter(function(r){ return r.some(function(c){ return c.trim() !== ''; }); });
+  }
+  function parseCsvCards(text){
+    var lines = parseCsvRows(text);
+    if (!lines.length) return [];
+    var header = lines[0].map(function(s){ return s.toLowerCase().trim(); });
+    var hasHeader = header.indexOf('front') >= 0 && header.indexOf('back') >= 0;
+    var idx = { front: 0, back: 1, hint: 2, type: 3 }, start = 0;
+    if (hasHeader){ start = 1; idx.front = header.indexOf('front'); idx.back = header.indexOf('back'); idx.hint = header.indexOf('hint'); idx.type = header.indexOf('type'); }
+    var cards = [];
+    for (var i = start; i < lines.length; i++){
+      var r = lines[i];
+      var front = (r[idx.front] || '').trim(), back = (r[idx.back] || '').trim();
+      if (!front || !back) continue;
+      var typeRaw = idx.type >= 0 ? (r[idx.type] || '') : '';
+      cards.push({ type: typeRaw.toLowerCase().trim() === 'cloze' ? 'cloze' : 'basic', front: front, back: back, hint: idx.hint >= 0 ? (r[idx.hint] || '').trim() : '' });
+    }
+    return cards.slice(0, 500);
+  }
+  async function importCsv(file){
+    var text = await readFileText(file);
+    var cards = parseCsvCards(text);
+    if (!cards.length){ window.alert('No valid rows found. Expected columns: front, back[, hint, type].'); return; }
+    var out = await api('/api/decks/' + encodeURIComponent(currentDeck.id) + '/cards', { method:'POST', body: JSON.stringify({ cards: cards }) });
+    if (out.res.status === 401){ signOut(); return; }
+    if (out.res.ok && out.data.ok){ await loadCards(); window.alert('Imported ' + out.data.added + ' card' + (out.data.added === 1 ? '' : 's') + '.'); }
+    else window.alert(out.data.error || 'Import failed.');
   }
   function mkCardAct(title, icon, danger){
     var b = document.createElement('button'); b.className = 'card-act' + (danger ? ' danger' : ''); b.type = 'button'; b.title = title;
@@ -1037,6 +1123,14 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       head.appendChild(badge); head.appendChild(actions);
       var q = document.createElement('div'); q.className = 'q'; q.textContent = c.front;
       var a = document.createElement('div'); a.className = 'a'; a.textContent = c.back;
+      if (cardSortMode === 'manual'){
+        row.classList.add('draggable'); row.draggable = true;
+        row.addEventListener('dragstart', function(){ dragCardId = c.id; row.style.opacity = '0.5'; });
+        row.addEventListener('dragend', function(){ row.style.opacity = ''; });
+        row.addEventListener('dragover', function(e){ e.preventDefault(); row.classList.add('drag-over'); });
+        row.addEventListener('dragleave', function(){ row.classList.remove('drag-over'); });
+        row.addEventListener('drop', function(e){ e.preventDefault(); row.classList.remove('drag-over'); onCardDrop(c.id); });
+      }
       row.appendChild(head); row.appendChild(q); row.appendChild(a); list.appendChild(row);
     });
   }
@@ -1101,64 +1195,70 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
 
   // Generation returns PROPOSED cards; nothing is saved until the user approves.
   var proposedSource = null;
-  var droppedFile = null;
+  var droppedFiles = [];
   var DOCX_MT = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
   var PPTX_MT = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+
+  function setBusy(t){ $('genBusy').innerHTML = '<span class="spinner"></span> ' + t; }
+  async function fileToBody(f){
+    var name = f.name || 'file', type = f.type || '';
+    if (type === 'application/pdf' || /\.pdf$/i.test(name)) return { file: { name: name, mediaType: 'application/pdf', dataBase64: await readFileB64(f) } };
+    if (type.indexOf('image/') === 0) return { file: { name: name, mediaType: type, dataBase64: await readFileB64(f) } };
+    if (/\.docx$/i.test(name) || type.indexOf('wordprocessingml') >= 0) return { file: { name: name, mediaType: DOCX_MT, dataBase64: await readFileB64(f) } };
+    if (/\.pptx$/i.test(name) || type.indexOf('presentationml') >= 0) return { file: { name: name, mediaType: PPTX_MT, dataBase64: await readFileB64(f) } };
+    return { text: await readFileText(f) };
+  }
+  function fileKind(f){
+    var name = f.name || '', type = f.type || '';
+    if (type.indexOf('image/') === 0) return 'image';
+    if (/\.pdf$/i.test(name) || type === 'application/pdf') return 'pdf';
+    if (/\.docx$/i.test(name)) return 'docx';
+    if (/\.pptx$/i.test(name)) return 'pptx';
+    return 'file';
+  }
 
   async function generate(){
     var text = ($('genText').value || '').trim();
     var url = ($('genUrl').value || '').trim();
-    var f = droppedFile || ($('genFile').files && $('genFile').files[0]);
-    if (!text && !url && !f){ msgOn('genMsg', 'err', 'Paste notes, a link, or choose a file first.'); return; }
+    var files = (droppedFiles && droppedFiles.length) ? droppedFiles.slice() : Array.prototype.slice.call(($('genFile').files) || []);
+    if (!text && !url && !files.length){ msgOn('genMsg', 'err', 'Paste notes, a link, or choose file(s) first.'); return; }
+    var cardType = (document.querySelector('input[name=cardType]:checked') || {}).value || 'mix';
 
     var btn = $('genBtn'); btn.disabled = true;
     $('genPreview').classList.add('hidden');
     msgOn('genMsg', null, '');
     $('genBusy').classList.add('on');
+    var gen = '/api/decks/' + encodeURIComponent(currentDeck.id) + '/generate';
     try {
-      var body = {};
-      if (f){
-        var name = f.name || 'file';
-        var type = f.type || '';
-        if (type === 'application/pdf' || /\.pdf$/i.test(name)){
-          body.file = { name: name, mediaType: 'application/pdf', dataBase64: await readFileB64(f) };
-        } else if (type.indexOf('image/') === 0){
-          body.file = { name: name, mediaType: type, dataBase64: await readFileB64(f) };
-        } else if (/\.docx$/i.test(name) || type.indexOf('wordprocessingml') >= 0){
-          body.file = { name: name, mediaType: DOCX_MT, dataBase64: await readFileB64(f) };
-        } else if (/\.pptx$/i.test(name) || type.indexOf('presentationml') >= 0){
-          body.file = { name: name, mediaType: PPTX_MT, dataBase64: await readFileB64(f) };
-        } else {
-          body.text = (text ? text + '\n\n' : '') + (await readFileText(f));
+      var allCards = [], summaries = [], srcMeta;
+      if (files.length){
+        // Bulk: process files one at a time, accumulate into a single preview.
+        for (var i = 0; i < files.length; i++){
+          setBusy('Generating ' + (i + 1) + ' of ' + files.length + ': ' + files[i].name + '…');
+          var body = await fileToBody(files[i]); body.cardType = cardType;
+          var out = await api(gen, { method:'POST', body: JSON.stringify(body) });
+          if (out.res.status === 401){ signOut(); return; }
+          if (out.res.ok && out.data.ok){ allCards = allCards.concat(out.data.cards || []); if (out.data.summary) summaries.push(out.data.summary); }
+          else { summaries.push(files[i].name + ': ' + (out.data.error || 'could not generate')); }
         }
-      } else if (url){
-        body.url = url;
+        srcMeta = { kind: files.length > 1 ? 'file' : fileKind(files[0]), filename: files.length > 1 ? files.length + ' files' : files[0].name, summary: summaries.join('  •  ') };
       } else {
-        body.text = text;
+        setBusy('Generating cards — reading your material…');
+        var body1 = url ? { url: url } : { text: text }; body1.cardType = cardType;
+        var out1 = await api(gen, { method:'POST', body: JSON.stringify(body1) });
+        if (out1.res.status === 401){ signOut(); return; }
+        if (!out1.res.ok || !out1.data.ok){ btn.disabled = false; $('genBusy').classList.remove('on'); msgOn('genMsg', 'err', out1.data.error || 'Generation failed.'); return; }
+        allCards = out1.data.cards || []; if (out1.data.summary) summaries.push(out1.data.summary);
+        srcMeta = out1.data.source || {}; srcMeta.summary = out1.data.summary || '';
       }
-      var ctSel = document.querySelector('input[name=cardType]:checked');
-      body.cardType = ctSel ? ctSel.value : 'mix';
-      var out = await api('/api/decks/' + encodeURIComponent(currentDeck.id) + '/generate',
-        { method:'POST', body: JSON.stringify(body) });
-      btn.disabled = false;
-      $('genBusy').classList.remove('on');
-      if (out.res.status === 401){ signOut(); return; }
-      if (!out.res.ok || !out.data.ok){ msgOn('genMsg', 'err', out.data.error || 'Generation failed.'); return; }
-
-      var cards = out.data.cards || [];
-      if (!cards.length){ msgOn('genMsg', 'err', 'The material was too thin to make cards from. Try adding more.'); return; }
-      msgOn('genMsg', null, '');
-      if (out.data.summary){
-        var s = $('genSummary'); s.classList.remove('hidden');
-        s.textContent = 'Summary — ' + out.data.summary;
-      }
-      proposedSource = out.data.source || {};
-      proposedSource.summary = out.data.summary || '';
-      renderPreview(cards);
+      btn.disabled = false; $('genBusy').classList.remove('on');
+      if (!allCards.length){ msgOn('genMsg', 'err', 'Could not make cards from that. Try adding more material.'); return; }
+      if (summaries.length){ var s = $('genSummary'); s.classList.remove('hidden'); s.textContent = 'Summary — ' + summaries.join('  •  '); }
+      proposedSource = srcMeta;
+      renderPreview(allCards);
     } catch (ex){
-      btn.disabled = false;
-      $('genBusy').classList.remove('on');
-      msgOn('genMsg', 'err', 'Could not prepare the upload. Try a smaller file.');
+      btn.disabled = false; $('genBusy').classList.remove('on');
+      msgOn('genMsg', 'err', 'Could not prepare the upload. Try fewer or smaller files.');
     }
   }
 
@@ -1212,7 +1312,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     if (!out.res.ok || !out.data.ok){ msgOn('genMsg', 'err', out.data.error || 'Could not add the cards.'); return; }
 
     msgOn('genMsg', 'ok', 'Added ' + out.data.added + ' card' + (out.data.added === 1 ? '' : 's') + ' to the deck.');
-    $('genText').value = ''; $('genFile').value = ''; $('genUrl').value = ''; droppedFile = null;
+    $('genText').value = ''; $('genFile').value = ''; $('genUrl').value = ''; droppedFiles = [];
     $('dropHint').textContent = 'Tip: drag a PDF, image, .docx, or .pptx onto this box.';
     discardPreview();
     await loadCards();
@@ -1440,9 +1540,25 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
 
   // ── Account ──
   var currentUserEmail = '';
-  function loadAccount(){
+  async function loadAccount(){
     $('acctEmail').textContent = currentUserEmail || '—';
-    $('acctPw').value = ''; msgOn('acctMsg', null, '');
+    $('acctPw').value = ''; $('acctFirst').value = ''; $('acctLast').value = '';
+    msgOn('acctMsg', null, ''); msgOn('acctNameMsg', null, '');
+    var out = await api('/api/profile');
+    if (out.res.status === 401){ signOut(); return; }
+    if (out.res.ok && out.data.ok){
+      $('acctFirst').value = out.data.firstName || '';
+      $('acctLast').value = out.data.lastName || '';
+      if (out.data.email){ currentUserEmail = out.data.email; $('acctEmail').textContent = out.data.email; }
+    }
+  }
+  async function saveName(){
+    var btn = $('acctNameBtn'); btn.disabled = true;
+    var out = await api('/api/profile', { method:'PATCH', body: JSON.stringify({ firstName: $('acctFirst').value, lastName: $('acctLast').value }) });
+    btn.disabled = false;
+    if (out.res.status === 401){ signOut(); return; }
+    if (!out.res.ok || !out.data.ok){ msgOn('acctNameMsg', 'err', out.data.error || 'Could not save your name.'); return; }
+    msgOn('acctNameMsg', 'ok', 'Saved.');
   }
   async function changePassword(){
     var pw = $('acctPw').value || '';
@@ -1514,6 +1630,10 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   $('cmSave').addEventListener('click', saveCard);
   $('cmCancel').addEventListener('click', function(){ $('cardModal').classList.add('hidden'); });
   $('cardSort').addEventListener('change', function(){ cardSortMode = $('cardSort').value; renderCards(); });
+  $('exportCsvBtn').addEventListener('click', exportCsv);
+  $('importCsvBtn').addEventListener('click', function(){ $('csvFile').click(); });
+  $('csvFile').addEventListener('change', function(){ var f = $('csvFile').files && $('csvFile').files[0]; if (f) importCsv(f); $('csvFile').value = ''; });
+  $('acctNameBtn').addEventListener('click', saveName);
   // Fact-check modal
   $('factClose').addEventListener('click', function(){ $('factModal').classList.add('hidden'); });
   $('factApply').addEventListener('click', function(){
@@ -1531,9 +1651,10 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   $('studyAgainBtn').addEventListener('click', studyAgain);
   // Capture: file input + drag-and-drop
   $('genFile').addEventListener('change', function(){
-    droppedFile = null;
-    var f = $('genFile').files && $('genFile').files[0];
-    if (f) $('dropHint').textContent = 'Ready: ' + f.name + ' — click Generate cards.';
+    droppedFiles = [];
+    var n = ($('genFile').files || []).length;
+    if (n === 1) $('dropHint').textContent = 'Ready: ' + $('genFile').files[0].name + ' — click Generate cards.';
+    else if (n > 1) $('dropHint').textContent = 'Ready: ' + n + ' files — click Generate cards.';
   });
   (function(){
     var form = $('genForm'); if (!form) return;
@@ -1542,7 +1663,13 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     form.addEventListener('drop', function(e){
       e.preventDefault(); form.classList.remove('dragover');
       var files = e.dataTransfer && e.dataTransfer.files;
-      if (files && files.length){ droppedFile = files[0]; $('genFile').value = ''; $('dropHint').textContent = 'Ready: ' + droppedFile.name + ' — click Generate cards.'; }
+      if (files && files.length){
+        droppedFiles = Array.prototype.slice.call(files);
+        $('genFile').value = '';
+        $('dropHint').textContent = droppedFiles.length > 1
+          ? ('Ready: ' + droppedFiles.length + ' files — click Generate cards.')
+          : ('Ready: ' + droppedFiles[0].name + ' — click Generate cards.');
+      }
     });
   })();
 

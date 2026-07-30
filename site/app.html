@@ -884,7 +884,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     }
     $('deckTitle').value = ''; $('deckSubject').value = '';
     hideDeckForm();
-    await loadDecks();
+    openDeck(out.data.deck); // land on the new deck's capture/upload screen
   }
 
   function deleteDeck(d){

@@ -4,6 +4,8 @@ import Anthropic from '@anthropic-ai/sdk';
 import mammoth from 'mammoth';
 import { parseOffice } from 'officeparser';
 import { fsrs, generatorParameters, Rating } from 'ts-fsrs';
+import { extract as extractArticle } from '@extractus/article-extractor';
+import { YoutubeTranscript } from 'youtube-transcript';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -313,18 +315,36 @@ const DOCX_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingm
 const PPTX_TYPE = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
 const GEN_PROMPT = 'Generate study flashcards and a summary from this material.';
 
-async function fetchArticle(rawUrl) {
-  let u;
-  try { u = new URL(rawUrl); } catch { throw new Error('That does not look like a valid URL.'); }
-  if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new Error('Only http(s) links are supported.');
-  let resp;
-  try {
-    resp = await fetch(u.href, { headers: { 'User-Agent': 'KrakenoteBot/1.0' }, signal: AbortSignal.timeout(15000) });
-  } catch { throw new Error('Could not reach that link.'); }
-  if (!resp.ok) throw new Error('Could not fetch that link (HTTP ' + resp.status + ').');
-  const html = (await resp.text()).slice(0, 3_000_000);
-  // Crude readability: drop scripts/styles, strip tags, decode common entities.
-  const text = html
+function isYouTube(u) {
+  return /(^|\.)youtube\.com$/.test(u.hostname) || u.hostname === 'youtu.be' || u.hostname === 'm.youtube.com';
+}
+
+async function fetchYouTube(rawUrl) {
+  // YouTube intermittently rate-limits datacenter IPs; retry transient failures.
+  let lastErr;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const items = await YoutubeTranscript.fetchTranscript(rawUrl);
+      const text = (items || []).map((i) => i.text).join(' ').replace(/\s+/g, ' ').trim();
+      if (text.length < 100) throw new Error('empty transcript');
+      return text;
+    } catch (ex) {
+      lastErr = ex;
+      const msg = (ex?.message || '').toLowerCase();
+      const transient = msg.includes('too many requests') || msg.includes('fetch') || msg.includes('network') || msg.includes('timeout') || msg.includes('econn');
+      if (!transient) break; // genuine "disabled"/"not available"/"empty" — no point retrying
+      await new Promise((r) => setTimeout(r, 700 * (attempt + 1)));
+    }
+  }
+  console.error('[ingest] youtube transcript failed:', lastErr?.message);
+  const m = (lastErr?.message || '').toLowerCase();
+  if (m.includes('too many requests'))
+    throw new Error('YouTube is rate-limiting transcript requests right now — try again in a moment, or paste the transcript text directly.');
+  throw new Error("Couldn't get a transcript for that video — captions may be disabled or unavailable. You can paste the transcript text instead.");
+}
+
+function stripHtml(s) {
+  return s
     .replace(/<script[\s\S]*?<\/script>/gi, ' ')
     .replace(/<style[\s\S]*?<\/style>/gi, ' ')
     .replace(/<[^>]+>/g, ' ')
@@ -332,7 +352,42 @@ async function fetchArticle(rawUrl) {
     .replace(/&gt;/g, '>').replace(/&#39;/g, "'").replace(/&quot;/g, '"')
     .replace(/\s+/g, ' ')
     .trim();
-  if (text.length < 200) throw new Error('Could not extract readable text from that page.');
+}
+
+async function fetchArticle(rawUrl) {
+  let u;
+  try { u = new URL(rawUrl); } catch { throw new Error('That does not look like a valid URL.'); }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new Error('Only http(s) links are supported.');
+  if (isYouTube(u)) return fetchYouTube(rawUrl);
+
+  // 1. Readability extraction — clean article body when the page is an article.
+  try {
+    const art = await extractArticle(rawUrl);
+    if (art && art.content) {
+      const text = stripHtml((art.title ? art.title + '\n\n' : '') + art.content);
+      if (text.length >= 200) return text;
+    }
+  } catch (ex) { console.error('[ingest] article extract failed:', ex?.message); }
+
+  // 2. Fallback — raw fetch + strip tags. Handles product/app pages that
+  //    readability skips; the user reviews the resulting cards anyway.
+  let resp;
+  try {
+    resp = await fetch(u.href, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; KrakenoteBot/1.0; +https://krakenote.com)' },
+      signal: AbortSignal.timeout(15000),
+    });
+  } catch { throw new Error('Could not reach that link.'); }
+  if (!resp.ok) {
+    if (resp.status === 429 || resp.status === 403) {
+      throw new Error('That site is blocking automated access. Try a different link, or copy the text and paste it in directly.');
+    }
+    throw new Error('Could not fetch that link (HTTP ' + resp.status + ').');
+  }
+  const text = stripHtml((await resp.text()).slice(0, 3_000_000));
+  if (text.length < 100) {
+    throw new Error("Couldn't pull readable text from that page — try a link with more article text, or paste the text directly.");
+  }
   return text;
 }
 
@@ -380,7 +435,10 @@ async function buildIngest(body) {
     throw new Error('Unsupported file type. Use PDF, image, .docx, .pptx, .txt, or .md.');
   }
 
-  if (url) return asText(await fetchArticle(url), 'url', url);
+  if (url) {
+    const yt = /youtube\.com|youtu\.be/.test(url);
+    return asText(await fetchArticle(url), yt ? 'youtube' : 'url', url);
+  }
   if (text) return asText(text, 'text', null);
   throw new Error('Provide notes, a link, or a file to generate from.');
 }
@@ -393,7 +451,9 @@ const GEN_SYSTEM =
   '"basic" (a question on the front, its correct answer on the back) and "cloze" (a sentence taken from ' +
   'the material with one key term replaced by "____" on the front, and that exact term on the back). ' +
   'Prefer atomic, single-fact cards; add a short hint or an empty string. Produce 5-20 cards scaled to ' +
-  'the depth of the material — if it is too thin to support a card, produce fewer rather than padding.';
+  'the depth of the material — if it is too thin to support a card, produce fewer rather than padding. ' +
+  'Format any mathematical, physical, or chemical formulas and equations using LaTeX delimiters — $...$ ' +
+  'for inline and $$...$$ for display — so they render correctly.';
 
 // POST /api/decks/:id/generate  { text? , file?: {name, mediaType, dataBase64} }
 app.post('/api/decks/:id/generate', requireUser, async (req, res) => {
@@ -895,6 +955,10 @@ app.get('/vendor/supabase.js', (_req, res) => {
     join(__dirname, '..', 'node_modules', '@supabase', 'supabase-js', 'dist', 'umd', 'supabase.js'),
   );
 });
+
+// KaTeX (math rendering) — served from node_modules so its CSS-referenced fonts
+// resolve under the same /vendor/katex path.
+app.use('/vendor/katex', express.static(join(__dirname, '..', 'node_modules', 'katex', 'dist'), { maxAge: '7d' }));
 
 // Serve the static landing page.
 app.use(express.static(SITE_DIR, { extensions: ['html'] }));

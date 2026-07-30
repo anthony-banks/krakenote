@@ -14,6 +14,9 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/vendor/katex/katex.min.css" />
+<script defer src="/vendor/katex/katex.min.js"></script>
+<script defer src="/vendor/katex/contrib/auto-render.min.js"></script>
 <style>
   :root{
     --head:'Poppins',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
@@ -84,6 +87,10 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   .auth label{display:block;font-family:var(--head);font-weight:600;font-size:13px;margin-bottom:8px}
   .auth input{width:100%;font-family:var(--body);font-size:16px;padding:14px 16px;border-radius:14px;border:1.5px solid var(--border);background:var(--surface-2);color:var(--text);outline:none;margin-bottom:16px}
   .auth input:focus{border-color:var(--accent)}
+  .pw-wrap{position:relative;margin-bottom:16px}
+  .pw-wrap input{margin-bottom:0!important;padding-right:62px}
+  .pw-toggle{position:absolute;right:6px;top:0;height:100%;display:inline-flex;align-items:center;background:transparent;border:0;color:var(--muted);cursor:pointer;font-family:var(--head);font-weight:600;font-size:13px;padding:0 8px}
+  .pw-toggle:hover{color:var(--accent)}
   .auth .btn-primary{width:100%}
   .msg{display:none;font-family:var(--head);font-weight:600;font-size:14px;margin-bottom:14px;padding:11px 14px;border-radius:12px;line-height:1.45}
   .msg.err{display:block;color:var(--danger);background:color-mix(in srgb,var(--danger) 12%,transparent);border:1px solid color-mix(in srgb,var(--danger) 30%,transparent)}
@@ -158,6 +165,9 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   .gen-form textarea{width:100%;font-family:var(--body);font-size:15px;padding:12px 14px;border-radius:12px;border:1.5px solid var(--border);background:var(--surface-2);color:var(--text);outline:none;resize:vertical}
   .gen-form textarea:focus{border-color:var(--accent)}
   .gen-form .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .ai-note{display:flex;align-items:flex-start;gap:10px;background:color-mix(in srgb,var(--accent) 10%,transparent);border:1px solid color-mix(in srgb,var(--accent) 26%,transparent);border-radius:12px;padding:10px 12px;font-size:13px;color:var(--text);line-height:1.45}
+  .ai-note-x{margin-left:auto;background:transparent;border:0;color:var(--muted);cursor:pointer;font-size:14px;line-height:1;flex:none;padding:2px 4px}
+  .ai-note-x:hover{color:var(--accent)}
   .gen-form input[type=file]{font-family:var(--body);font-size:13px;color:var(--muted)}
   .gen-summary{background:color-mix(in srgb,var(--accent) 10%,transparent);border:1px solid color-mix(in srgb,var(--accent) 26%,transparent);border-radius:12px;padding:12px 14px;font-size:14px;color:var(--text)}
   .gen-preview{display:flex;flex-direction:column;gap:12px;border-top:1px solid var(--border);padding-top:14px}
@@ -340,7 +350,10 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       <label for="em">Email</label>
       <input type="email" id="em" autocomplete="username" placeholder="you@email.com" required />
       <label for="pw">Password</label>
-      <input type="password" id="pw" autocomplete="current-password" placeholder="••••••••" required />
+      <div class="pw-wrap">
+        <input type="password" id="pw" autocomplete="current-password" placeholder="••••••••" required />
+        <button type="button" class="pw-toggle" data-target="pw">Show</button>
+      </div>
       <button class="btn btn-primary" type="submit" id="authBtn">Sign in</button>
     </form>
 
@@ -466,7 +479,10 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
         <button class="btn btn-primary" id="acctNameBtn" type="button">Save name</button>
         <div class="acct-sep"></div>
         <h3 class="acct-h">Change password</h3>
-        <input type="password" id="acctPw" placeholder="New password — at least 8 characters" autocomplete="new-password" />
+        <div class="pw-wrap">
+          <input type="password" id="acctPw" placeholder="New password — at least 8 characters" autocomplete="new-password" />
+          <button type="button" class="pw-toggle" data-target="acctPw">Show</button>
+        </div>
         <div class="msg" id="acctMsg"></div>
         <button class="btn btn-primary" id="acctPwBtn" type="button">Update password</button>
         <div class="acct-sep"></div>
@@ -515,8 +531,12 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       </div>
 
       <div class="gen-form" id="genForm">
+        <div class="ai-note" id="aiNote">
+          <span>✨ AI can make mistakes — always review generated cards for accuracy before adding them to a deck. Extracted sources (PDFs, articles, YouTube transcripts) can also be imperfect.</span>
+          <button class="ai-note-x" id="aiNoteX" type="button" aria-label="Dismiss">✕</button>
+        </div>
         <textarea id="genText" rows="4" placeholder="Paste notes here — or drop a file/image, or paste a link below — then let AI make flashcards."></textarea>
-        <input type="url" id="genUrl" class="gen-url" placeholder="…or paste an article URL (https://…)" />
+        <input type="url" id="genUrl" class="gen-url" placeholder="…or paste an article or YouTube link" />
         <div class="type-control">
           <span>Card types:</span>
           <label><input type="radio" name="cardType" value="mix" checked /> Mix</label>
@@ -526,6 +546,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
         <div class="row">
           <input type="file" id="genFile" multiple accept=".pdf,.txt,.md,.docx,.pptx,image/*,application/pdf,text/plain,text/markdown" />
           <button class="btn btn-primary" id="genBtn" type="button">✨ Generate cards</button>
+          <button class="linkbtn" id="clearBtn" type="button">Clear</button>
         </div>
         <div class="drop-hint" id="dropHint">Tip: drag a PDF, image, .docx, or .pptx onto this box.</div>
         <div class="gen-busy" id="genBusy"><span class="spinner"></span> Generating cards — reading your material and writing questions…</div>
@@ -880,7 +901,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     }
     $('deckTitle').value = ''; $('deckSubject').value = '';
     hideDeckForm();
-    await loadDecks();
+    openDeck(out.data.deck); // land on the new deck's capture/upload screen
   }
 
   function deleteDeck(d){
@@ -907,6 +928,22 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
+  }
+
+  // Render LaTeX ($...$, $$...$$) inside an element via KaTeX auto-render.
+  function mathify(el){
+    if (!el || !window.renderMathInElement) return;
+    try {
+      window.renderMathInElement(el, {
+        delimiters: [
+          { left: '$$', right: '$$', display: true },
+          { left: '$', right: '$', display: false },
+          { left: '\\(', right: '\\)', display: false },
+          { left: '\\[', right: '\\]', display: true },
+        ],
+        throwOnError: false,
+      });
+    } catch (e) {}
   }
 
   // ── Card editor (add / edit) ──
@@ -1133,6 +1170,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       }
       row.appendChild(head); row.appendChild(q); row.appendChild(a); list.appendChild(row);
     });
+    mathify(list);
   }
 
   async function loadCards(){
@@ -1293,6 +1331,12 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     $('genSummary').classList.add('hidden');
     proposedSource = null;
   }
+  function clearCapture(){
+    $('genText').value = ''; $('genUrl').value = ''; $('genFile').value = ''; droppedFiles = [];
+    $('dropHint').textContent = 'Tip: drag a PDF, image, .docx, or .pptx onto this box.';
+    msgOn('genMsg', null, '');
+    discardPreview();
+  }
 
   async function approvePreview(){
     var rows = $('prevList').querySelectorAll('.prev-card');
@@ -1344,6 +1388,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     $('studyAgainBtn').classList.add('hidden');
     $('reviewProgress').textContent = (reviewIdx + 1) + ' / ' + reviewQueue.length;
     $('reviewDeck').textContent = c.deckTitle || '';
+    mathify($('reviewFront')); mathify($('reviewHint'));
   }
 
   function startReviewWith(cards){
@@ -1485,6 +1530,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       b.addEventListener('click', function(){ answerQuiz(b, opt, item); });
       wrap.appendChild(b);
     });
+    mathify($('quizQuestion')); mathify(wrap);
   }
   function answerQuiz(btn, opt, item){
     Array.prototype.forEach.call($('quizOptions').querySelectorAll('.quiz-opt'), function(b){
@@ -1600,6 +1646,26 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   $('createDeckBtn').addEventListener('click', createDeck);
   $('backToDecks').addEventListener('click', backToDeckList);
   $('genBtn').addEventListener('click', generate);
+  $('clearBtn').addEventListener('click', clearCapture);
+  // Dismissable AI-review disclaimer (remembers dismissal).
+  (function(){
+    var seen = false; try { seen = localStorage.getItem('kn_ai_note') === '1'; } catch (e) {}
+    if (seen) $('aiNote').classList.add('hidden');
+    $('aiNoteX').addEventListener('click', function(){
+      $('aiNote').classList.add('hidden');
+      try { localStorage.setItem('kn_ai_note', '1'); } catch (e) {}
+    });
+  })();
+  // Show/hide password toggles
+  Array.prototype.forEach.call(document.querySelectorAll('.pw-toggle'), function(b){
+    b.addEventListener('click', function(){
+      var inp = $(b.getAttribute('data-target'));
+      if (!inp) return;
+      var show = inp.type === 'password';
+      inp.type = show ? 'text' : 'password';
+      b.textContent = show ? 'Hide' : 'Show';
+    });
+  });
   $('approveBtn').addEventListener('click', approvePreview);
   $('discardBtn').addEventListener('click', discardPreview);
   $('reviewBtn').addEventListener('click', startReview);
@@ -1609,6 +1675,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     $('revealBtn').classList.add('hidden');
     $('gradeRow').classList.remove('hidden');
     $('studyAgainBtn').classList.remove('hidden');
+    mathify($('reviewBack'));
   });
   Array.prototype.forEach.call(document.querySelectorAll('#gradeRow .grade'), function(b){
     b.addEventListener('click', function(){ gradeCard(parseInt(b.getAttribute('data-grade'), 10)); });

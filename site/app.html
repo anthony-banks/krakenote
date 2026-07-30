@@ -14,6 +14,9 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/vendor/katex/katex.min.css" />
+<script defer src="/vendor/katex/katex.min.js"></script>
+<script defer src="/vendor/katex/contrib/auto-render.min.js"></script>
 <style>
   :root{
     --head:'Poppins',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
@@ -516,7 +519,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
 
       <div class="gen-form" id="genForm">
         <textarea id="genText" rows="4" placeholder="Paste notes here — or drop a file/image, or paste a link below — then let AI make flashcards."></textarea>
-        <input type="url" id="genUrl" class="gen-url" placeholder="…or paste an article URL (https://…)" />
+        <input type="url" id="genUrl" class="gen-url" placeholder="…or paste an article or YouTube link" />
         <div class="type-control">
           <span>Card types:</span>
           <label><input type="radio" name="cardType" value="mix" checked /> Mix</label>
@@ -526,6 +529,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
         <div class="row">
           <input type="file" id="genFile" multiple accept=".pdf,.txt,.md,.docx,.pptx,image/*,application/pdf,text/plain,text/markdown" />
           <button class="btn btn-primary" id="genBtn" type="button">✨ Generate cards</button>
+          <button class="linkbtn" id="clearBtn" type="button">Clear</button>
         </div>
         <div class="drop-hint" id="dropHint">Tip: drag a PDF, image, .docx, or .pptx onto this box.</div>
         <div class="gen-busy" id="genBusy"><span class="spinner"></span> Generating cards — reading your material and writing questions…</div>
@@ -909,6 +913,22 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     });
   }
 
+  // Render LaTeX ($...$, $$...$$) inside an element via KaTeX auto-render.
+  function mathify(el){
+    if (!el || !window.renderMathInElement) return;
+    try {
+      window.renderMathInElement(el, {
+        delimiters: [
+          { left: '$$', right: '$$', display: true },
+          { left: '$', right: '$', display: false },
+          { left: '\\(', right: '\\)', display: false },
+          { left: '\\[', right: '\\]', display: true },
+        ],
+        throwOnError: false,
+      });
+    } catch (e) {}
+  }
+
   // ── Card editor (add / edit) ──
   var editingCardId = null;
   function openCardEditor(card){
@@ -1133,6 +1153,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       }
       row.appendChild(head); row.appendChild(q); row.appendChild(a); list.appendChild(row);
     });
+    mathify(list);
   }
 
   async function loadCards(){
@@ -1293,6 +1314,12 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     $('genSummary').classList.add('hidden');
     proposedSource = null;
   }
+  function clearCapture(){
+    $('genText').value = ''; $('genUrl').value = ''; $('genFile').value = ''; droppedFiles = [];
+    $('dropHint').textContent = 'Tip: drag a PDF, image, .docx, or .pptx onto this box.';
+    msgOn('genMsg', null, '');
+    discardPreview();
+  }
 
   async function approvePreview(){
     var rows = $('prevList').querySelectorAll('.prev-card');
@@ -1344,6 +1371,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     $('studyAgainBtn').classList.add('hidden');
     $('reviewProgress').textContent = (reviewIdx + 1) + ' / ' + reviewQueue.length;
     $('reviewDeck').textContent = c.deckTitle || '';
+    mathify($('reviewFront')); mathify($('reviewHint'));
   }
 
   function startReviewWith(cards){
@@ -1485,6 +1513,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       b.addEventListener('click', function(){ answerQuiz(b, opt, item); });
       wrap.appendChild(b);
     });
+    mathify($('quizQuestion')); mathify(wrap);
   }
   function answerQuiz(btn, opt, item){
     Array.prototype.forEach.call($('quizOptions').querySelectorAll('.quiz-opt'), function(b){
@@ -1600,6 +1629,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   $('createDeckBtn').addEventListener('click', createDeck);
   $('backToDecks').addEventListener('click', backToDeckList);
   $('genBtn').addEventListener('click', generate);
+  $('clearBtn').addEventListener('click', clearCapture);
   $('approveBtn').addEventListener('click', approvePreview);
   $('discardBtn').addEventListener('click', discardPreview);
   $('reviewBtn').addEventListener('click', startReview);
@@ -1609,6 +1639,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     $('revealBtn').classList.add('hidden');
     $('gradeRow').classList.remove('hidden');
     $('studyAgainBtn').classList.remove('hidden');
+    mathify($('reviewBack'));
   });
   Array.prototype.forEach.call(document.querySelectorAll('#gradeRow .grade'), function(b){
     b.addEventListener('click', function(){ gradeCard(parseInt(b.getAttribute('data-grade'), 10)); });

@@ -4,6 +4,8 @@ import Anthropic from '@anthropic-ai/sdk';
 import mammoth from 'mammoth';
 import { parseOffice } from 'officeparser';
 import { fsrs, generatorParameters, Rating } from 'ts-fsrs';
+import { extract as extractArticle } from '@extractus/article-extractor';
+import { YoutubeTranscript } from 'youtube-transcript';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -313,26 +315,40 @@ const DOCX_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingm
 const PPTX_TYPE = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
 const GEN_PROMPT = 'Generate study flashcards and a summary from this material.';
 
+function isYouTube(u) {
+  return /(^|\.)youtube\.com$/.test(u.hostname) || u.hostname === 'youtu.be' || u.hostname === 'm.youtube.com';
+}
+
+async function fetchYouTube(rawUrl) {
+  let items;
+  try {
+    items = await YoutubeTranscript.fetchTranscript(rawUrl);
+  } catch (ex) {
+    console.error('[ingest] youtube transcript failed:', ex?.message);
+    throw new Error("Couldn't get a transcript for that video — it may have captions disabled or be region-locked.");
+  }
+  const text = (items || []).map((i) => i.text).join(' ').replace(/\s+/g, ' ').trim();
+  if (text.length < 100) throw new Error('That video has no usable transcript.');
+  return text;
+}
+
 async function fetchArticle(rawUrl) {
   let u;
   try { u = new URL(rawUrl); } catch { throw new Error('That does not look like a valid URL.'); }
   if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new Error('Only http(s) links are supported.');
-  let resp;
-  try {
-    resp = await fetch(u.href, { headers: { 'User-Agent': 'KrakenoteBot/1.0' }, signal: AbortSignal.timeout(15000) });
-  } catch { throw new Error('Could not reach that link.'); }
-  if (!resp.ok) throw new Error('Could not fetch that link (HTTP ' + resp.status + ').');
-  const html = (await resp.text()).slice(0, 3_000_000);
-  // Crude readability: drop scripts/styles, strip tags, decode common entities.
-  const text = html
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+  if (isYouTube(u)) return fetchYouTube(rawUrl);
+  // Readability extraction (main article content, not the whole page).
+  let art;
+  try { art = await extractArticle(rawUrl); }
+  catch (ex) { console.error('[ingest] article extract failed:', ex?.message); throw new Error('Could not reach or parse that link.'); }
+  if (!art || !art.content) throw new Error('Could not extract readable text from that page.');
+  const text = ((art.title ? art.title + '\n\n' : '') + art.content)
     .replace(/<[^>]+>/g, ' ')
     .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>').replace(/&#39;/g, "'").replace(/&quot;/g, '"')
     .replace(/\s+/g, ' ')
     .trim();
-  if (text.length < 200) throw new Error('Could not extract readable text from that page.');
+  if (text.length < 100) throw new Error('Could not extract enough readable text from that page.');
   return text;
 }
 
@@ -380,7 +396,10 @@ async function buildIngest(body) {
     throw new Error('Unsupported file type. Use PDF, image, .docx, .pptx, .txt, or .md.');
   }
 
-  if (url) return asText(await fetchArticle(url), 'url', url);
+  if (url) {
+    const yt = /youtube\.com|youtu\.be/.test(url);
+    return asText(await fetchArticle(url), yt ? 'youtube' : 'url', url);
+  }
   if (text) return asText(text, 'text', null);
   throw new Error('Provide notes, a link, or a file to generate from.');
 }
@@ -393,7 +412,9 @@ const GEN_SYSTEM =
   '"basic" (a question on the front, its correct answer on the back) and "cloze" (a sentence taken from ' +
   'the material with one key term replaced by "____" on the front, and that exact term on the back). ' +
   'Prefer atomic, single-fact cards; add a short hint or an empty string. Produce 5-20 cards scaled to ' +
-  'the depth of the material — if it is too thin to support a card, produce fewer rather than padding.';
+  'the depth of the material — if it is too thin to support a card, produce fewer rather than padding. ' +
+  'Format any mathematical, physical, or chemical formulas and equations using LaTeX delimiters — $...$ ' +
+  'for inline and $$...$$ for display — so they render correctly.';
 
 // POST /api/decks/:id/generate  { text? , file?: {name, mediaType, dataBase64} }
 app.post('/api/decks/:id/generate', requireUser, async (req, res) => {
@@ -895,6 +916,10 @@ app.get('/vendor/supabase.js', (_req, res) => {
     join(__dirname, '..', 'node_modules', '@supabase', 'supabase-js', 'dist', 'umd', 'supabase.js'),
   );
 });
+
+// KaTeX (math rendering) — served from node_modules so its CSS-referenced fonts
+// resolve under the same /vendor/katex path.
+app.use('/vendor/katex', express.static(join(__dirname, '..', 'node_modules', 'katex', 'dist'), { maxAge: '7d' }));
 
 // Serve the static landing page.
 app.use(express.static(SITE_DIR, { extensions: ['html'] }));

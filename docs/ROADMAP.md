@@ -73,15 +73,19 @@ review) remains before opening the web app to real users — tracked below.
 sharing this backend + `docs/API.md`. Web frontend stays as-is. No on-device OCR needed —
 images go to Claude vision server-side (already built).
 
-### Access model — replace the hard waitlist gate (⬜ confirm before building)
-Move from "must be on the waitlist to register" → industry-standard **open signup + admin approval**:
-- Anyone can register (email/password or Google) → account starts `pending`.
-- `pending` user signs in → sees a "pending approval" screen, not the app.
-- Admin approves from the dashboard → `approved` (free-trial clock can start).
-- Optional `rejected` → "access declined" screen. Only `approved` reach the app.
-- Impl: `profiles.access_status` (pending|approved|rejected), open `/api/auth/signup`,
-  boot-time gate, admin approve/reject action. The waitlist table becomes the approval queue.
-  Trial/billing layered on later.
+### Access model — cost-safe freemium (gate the AI, not the app) (⬜ confirm before building)
+Only Claude calls (generation + fact-check) cost money; everything else is free to serve.
+So DON'T block the whole app behind approval — block only the AI.
+- Anyone registers (email/password or Google) → gets a **free tier** immediately.
+- **Free tier:** manual decks/cards, CSV import, review (FSRS), quizzes. **No AI. Zero Claude cost.**
+  Light caps (tunable): ~2 decks / ~50 manual cards.
+- **AI generation + fact-check = premium**, gated behind **admin approval** now → **paid Pro** later.
+  Non-enabled user taps Generate → "AI is a Pro feature, request access" prompt (no Claude call).
+- Admin approves from dashboard → unlocks AI (and/or a trial quota).
+- Impl: `profiles.plan` ('free' default | 'pro'/'approved') or `ai_enabled` flag; server-side
+  block on `/generate` + `/factcheck` for free users (clear 403); client shows upgrade prompt;
+  enforce free-tier deck/card caps; admin approve/upgrade action. Matches PRD §11 freemium.
+  The per-user AI cost cap becomes the trial/Pro quota.
 
 ### Auth (⬜)
 - ⬜ **Google login — web** (Supabase Google provider) and mobile

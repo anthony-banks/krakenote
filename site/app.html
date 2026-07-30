@@ -161,6 +161,9 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   .gen-form textarea{width:100%;font-family:var(--body);font-size:15px;padding:12px 14px;border-radius:12px;border:1.5px solid var(--border);background:var(--surface-2);color:var(--text);outline:none;resize:vertical}
   .gen-form textarea:focus{border-color:var(--accent)}
   .gen-form .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .ai-note{display:flex;align-items:flex-start;gap:10px;background:color-mix(in srgb,var(--accent) 10%,transparent);border:1px solid color-mix(in srgb,var(--accent) 26%,transparent);border-radius:12px;padding:10px 12px;font-size:13px;color:var(--text);line-height:1.45}
+  .ai-note-x{margin-left:auto;background:transparent;border:0;color:var(--muted);cursor:pointer;font-size:14px;line-height:1;flex:none;padding:2px 4px}
+  .ai-note-x:hover{color:var(--accent)}
   .gen-form input[type=file]{font-family:var(--body);font-size:13px;color:var(--muted)}
   .gen-summary{background:color-mix(in srgb,var(--accent) 10%,transparent);border:1px solid color-mix(in srgb,var(--accent) 26%,transparent);border-radius:12px;padding:12px 14px;font-size:14px;color:var(--text)}
   .gen-preview{display:flex;flex-direction:column;gap:12px;border-top:1px solid var(--border);padding-top:14px}
@@ -518,6 +521,10 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       </div>
 
       <div class="gen-form" id="genForm">
+        <div class="ai-note" id="aiNote">
+          <span>✨ AI can make mistakes — always review generated cards for accuracy before adding them to a deck. Extracted sources (PDFs, articles, YouTube transcripts) can also be imperfect.</span>
+          <button class="ai-note-x" id="aiNoteX" type="button" aria-label="Dismiss">✕</button>
+        </div>
         <textarea id="genText" rows="4" placeholder="Paste notes here — or drop a file/image, or paste a link below — then let AI make flashcards."></textarea>
         <input type="url" id="genUrl" class="gen-url" placeholder="…or paste an article or YouTube link" />
         <div class="type-control">
@@ -1630,6 +1637,15 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   $('backToDecks').addEventListener('click', backToDeckList);
   $('genBtn').addEventListener('click', generate);
   $('clearBtn').addEventListener('click', clearCapture);
+  // Dismissable AI-review disclaimer (remembers dismissal).
+  (function(){
+    var seen = false; try { seen = localStorage.getItem('kn_ai_note') === '1'; } catch (e) {}
+    if (seen) $('aiNote').classList.add('hidden');
+    $('aiNoteX').addEventListener('click', function(){
+      $('aiNote').classList.add('hidden');
+      try { localStorage.setItem('kn_ai_note', '1'); } catch (e) {}
+    });
+  })();
   $('approveBtn').addEventListener('click', approvePreview);
   $('discardBtn').addEventListener('click', discardPreview);
   $('reviewBtn').addEventListener('click', startReview);

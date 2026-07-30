@@ -320,16 +320,27 @@ function isYouTube(u) {
 }
 
 async function fetchYouTube(rawUrl) {
-  let items;
-  try {
-    items = await YoutubeTranscript.fetchTranscript(rawUrl);
-  } catch (ex) {
-    console.error('[ingest] youtube transcript failed:', ex?.message);
-    throw new Error("Couldn't get a transcript for that video — it may have captions disabled or be region-locked.");
+  // YouTube intermittently rate-limits datacenter IPs; retry transient failures.
+  let lastErr;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const items = await YoutubeTranscript.fetchTranscript(rawUrl);
+      const text = (items || []).map((i) => i.text).join(' ').replace(/\s+/g, ' ').trim();
+      if (text.length < 100) throw new Error('empty transcript');
+      return text;
+    } catch (ex) {
+      lastErr = ex;
+      const msg = (ex?.message || '').toLowerCase();
+      const transient = msg.includes('too many requests') || msg.includes('fetch') || msg.includes('network') || msg.includes('timeout') || msg.includes('econn');
+      if (!transient) break; // genuine "disabled"/"not available"/"empty" — no point retrying
+      await new Promise((r) => setTimeout(r, 700 * (attempt + 1)));
+    }
   }
-  const text = (items || []).map((i) => i.text).join(' ').replace(/\s+/g, ' ').trim();
-  if (text.length < 100) throw new Error('That video has no usable transcript.');
-  return text;
+  console.error('[ingest] youtube transcript failed:', lastErr?.message);
+  const m = (lastErr?.message || '').toLowerCase();
+  if (m.includes('too many requests'))
+    throw new Error('YouTube is rate-limiting transcript requests right now — try again in a moment, or paste the transcript text directly.');
+  throw new Error("Couldn't get a transcript for that video — captions may be disabled or unavailable. You can paste the transcript text instead.");
 }
 
 async function fetchArticle(rawUrl) {

@@ -64,3 +64,36 @@ review) remains before opening the web app to real users — tracked below.
 - **youtube-transcript** — "paste a YouTube link" ingestion source.
 - **OCR** — not needed separately; Claude vision handles images.
 - **Later:** ElevenLabs / OpenAI TTS (audio study mode); Stripe / RevenueCat (billing).
+
+---
+
+## Platform & access decisions (2026-07-30)
+
+**Mobile** = React Native + **Expo** (Metro), in a **separate repo** (`krakenote-mobile`),
+sharing this backend + `docs/API.md`. Web frontend stays as-is. No on-device OCR needed —
+images go to Claude vision server-side (already built).
+
+### Access model — replace the hard waitlist gate (⬜ confirm before building)
+Move from "must be on the waitlist to register" → industry-standard **open signup + admin approval**:
+- Anyone can register (email/password or Google) → account starts `pending`.
+- `pending` user signs in → sees a "pending approval" screen, not the app.
+- Admin approves from the dashboard → `approved` (free-trial clock can start).
+- Optional `rejected` → "access declined" screen. Only `approved` reach the app.
+- Impl: `profiles.access_status` (pending|approved|rejected), open `/api/auth/signup`,
+  boot-time gate, admin approve/reject action. The waitlist table becomes the approval queue.
+  Trial/billing layered on later.
+
+### Auth (⬜)
+- ⬜ **Google login — web** (Supabase Google provider) and mobile
+- ⬜ Sign in with Apple — mobile (iOS)
+- Email/password already works (web); reuse on mobile.
+
+### Decisions locked
+- AI generation stays in the **Express server** (mobile calls the same endpoints — no Edge Function).
+- Mobile is **online-first** for v1 (offline review is a later add). ← default; confirm.
+
+### Release-readiness blockers (must clear before ANY public release — web or mobile)
+- ⬜ **Production setup** — run migrations + set anon/Anthropic keys on prod (blocks mobile distribution too)
+- ⬜ Access/signup security (approval model above; remove email-confirm loophole)
+- ⬜ Per-user AI generation cost cap
+- ⬜ Security review

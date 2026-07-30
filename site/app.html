@@ -87,6 +87,10 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   .auth label{display:block;font-family:var(--head);font-weight:600;font-size:13px;margin-bottom:8px}
   .auth input{width:100%;font-family:var(--body);font-size:16px;padding:14px 16px;border-radius:14px;border:1.5px solid var(--border);background:var(--surface-2);color:var(--text);outline:none;margin-bottom:16px}
   .auth input:focus{border-color:var(--accent)}
+  .pw-wrap{position:relative;margin-bottom:16px}
+  .pw-wrap input{margin-bottom:0!important;padding-right:62px}
+  .pw-toggle{position:absolute;right:6px;top:0;height:100%;display:inline-flex;align-items:center;background:transparent;border:0;color:var(--muted);cursor:pointer;font-family:var(--head);font-weight:600;font-size:13px;padding:0 8px}
+  .pw-toggle:hover{color:var(--accent)}
   .auth .btn-primary{width:100%}
   .msg{display:none;font-family:var(--head);font-weight:600;font-size:14px;margin-bottom:14px;padding:11px 14px;border-radius:12px;line-height:1.45}
   .msg.err{display:block;color:var(--danger);background:color-mix(in srgb,var(--danger) 12%,transparent);border:1px solid color-mix(in srgb,var(--danger) 30%,transparent)}
@@ -346,7 +350,10 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       <label for="em">Email</label>
       <input type="email" id="em" autocomplete="username" placeholder="you@email.com" required />
       <label for="pw">Password</label>
-      <input type="password" id="pw" autocomplete="current-password" placeholder="••••••••" required />
+      <div class="pw-wrap">
+        <input type="password" id="pw" autocomplete="current-password" placeholder="••••••••" required />
+        <button type="button" class="pw-toggle" data-target="pw">Show</button>
+      </div>
       <button class="btn btn-primary" type="submit" id="authBtn">Sign in</button>
     </form>
 
@@ -472,7 +479,10 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
         <button class="btn btn-primary" id="acctNameBtn" type="button">Save name</button>
         <div class="acct-sep"></div>
         <h3 class="acct-h">Change password</h3>
-        <input type="password" id="acctPw" placeholder="New password — at least 8 characters" autocomplete="new-password" />
+        <div class="pw-wrap">
+          <input type="password" id="acctPw" placeholder="New password — at least 8 characters" autocomplete="new-password" />
+          <button type="button" class="pw-toggle" data-target="acctPw">Show</button>
+        </div>
         <div class="msg" id="acctMsg"></div>
         <button class="btn btn-primary" id="acctPwBtn" type="button">Update password</button>
         <div class="acct-sep"></div>
@@ -1646,6 +1656,16 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       try { localStorage.setItem('kn_ai_note', '1'); } catch (e) {}
     });
   })();
+  // Show/hide password toggles
+  Array.prototype.forEach.call(document.querySelectorAll('.pw-toggle'), function(b){
+    b.addEventListener('click', function(){
+      var inp = $(b.getAttribute('data-target'));
+      if (!inp) return;
+      var show = inp.type === 'password';
+      inp.type = show ? 'text' : 'password';
+      b.textContent = show ? 'Hide' : 'Show';
+    });
+  });
   $('approveBtn').addEventListener('click', approvePreview);
   $('discardBtn').addEventListener('click', discardPreview);
   $('reviewBtn').addEventListener('click', startReview);

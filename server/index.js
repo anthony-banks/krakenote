@@ -1,11 +1,14 @@
 import express from 'express';
+import helmet from 'helmet';
 import { createClient } from '@supabase/supabase-js';
 import Anthropic from '@anthropic-ai/sdk';
 import mammoth from 'mammoth';
 import { parseOffice } from 'officeparser';
 import { fsrs, generatorParameters, Rating } from 'ts-fsrs';
-import { extract as extractArticle } from '@extractus/article-extractor';
+import { extractFromHtml } from '@extractus/article-extractor';
 import { YoutubeTranscript } from 'youtube-transcript';
+import dns from 'node:dns/promises';
+import net from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -46,19 +49,44 @@ const AI_MODEL = process.env.ANTHROPIC_MODEL || 'claude-opus-4-8';
 const anthropic = ANTHROPIC_API_KEY ? new Anthropic({ apiKey: ANTHROPIC_API_KEY }) : null;
 
 const app = express();
+
+// Railway terminates TLS at its edge proxy and forwards X-Forwarded-For. Without
+// this, req.ip is the proxy socket and rate limits would key off a single shared
+// IP; with `true` Express would trust the leftmost (client-controlled) XFF entry
+// and the limits would be spoofable. Trusting a fixed hop count makes req.ip the
+// address the trusted proxy actually saw. Override TRUST_PROXY_HOPS if the edge
+// topology changes (e.g. a CDN adds a hop).
+app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS || 1));
+
+// Security headers. CSP is intentionally left off for now: the app pages are
+// single-file with heavy inline <script>/<style>, so a real policy needs the
+// frontend split out first — enabling one here would either break the app or
+// require 'unsafe-inline' (little value). The rest (nosniff, frameguard DENY,
+// HSTS, referrer-policy, no x-powered-by) are safe wins today.
+app.use(helmet({ contentSecurityPolicy: false }));
+
 // Deck routes carry base64 uploads (PDFs), so they need a larger body limit;
 // everything else stays tiny. The first matching parser wins — express.json
 // skips a body it has already parsed, so the 8kb global never re-runs here.
 app.use('/api/decks', express.json({ limit: '12mb' }));
 app.use(express.json({ limit: '8kb' }));
 
-// Basic in-memory rate limit: max 5 requests per IP per minute (per bucket).
+// Basic in-memory rate limit: max `max` requests per key per minute. Keys are
+// caller identity (req.ip, or the user id for authenticated AI endpoints) — never
+// a client-supplied header. NOTE: in-memory means per-replica and reset-on-deploy;
+// the daily AI quota (below) is the durable cost cap. A DB/Redis-backed limiter is
+// the eventual upgrade for multi-replica correctness.
 const buckets = new Map();
+const RL_WINDOW_MS = 60_000;
+let rlCalls = 0;
 function rateLimited(key, max = 5) {
   const now = Date.now();
-  const windowMs = 60_000;
+  // Evict expired buckets periodically so the Map can't grow unbounded.
+  if (++rlCalls % 500 === 0) {
+    for (const [k, v] of buckets) if (now - v.start > RL_WINDOW_MS) buckets.delete(k);
+  }
   const rec = buckets.get(key) || { count: 0, start: now };
-  if (now - rec.start > windowMs) {
+  if (now - rec.start > RL_WINDOW_MS) {
     rec.count = 0;
     rec.start = now;
   }
@@ -66,6 +94,9 @@ function rateLimited(key, max = 5) {
   buckets.set(key, rec);
   return rec.count > max;
 }
+
+// Rate-limit key from the real client IP (req.ip is trustworthy given trust proxy).
+const clientIp = (req) => req.ip || 'unknown';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -87,7 +118,7 @@ app.use((req, res, next) => {
 });
 
 app.post('/api/waitlist', async (req, res) => {
-  const ip = (req.headers['x-forwarded-for'] || req.ip || '').toString().split(',')[0].trim();
+  const ip = clientIp(req);
   if (rateLimited('wl:' + ip)) {
     return res.status(429).json({ ok: false, error: 'Too many requests. Try again shortly.' });
   }
@@ -122,8 +153,8 @@ app.post('/api/waitlist', async (req, res) => {
 // ── Web app: user auth + dashboard ──────────────────────────────────────────
 // Login/session run in the BROWSER against Supabase Auth with the anon key;
 // RLS policies (user_id = auth.uid()) are what protect user data. Signup is the
-// one exception — it runs here, server-side, because the waitlist gate has to be
-// enforced somewhere the browser cannot skip.
+// one exception — it runs here, server-side, so account creation + free-tier
+// profile seeding happen atomically where the browser cannot skip them.
 
 // Public runtime config for the browser client.
 app.get('/api/config', (_req, res) => {
@@ -134,11 +165,11 @@ app.get('/api/config', (_req, res) => {
 });
 
 // POST /api/auth/signup { email, password }
-// Waitlist-gated registration. Only emails already on the waitlist may register.
-// Enforced here rather than in the browser: the anon key can call signUp directly,
-// so a client-side check would be trivially bypassed.
+// Open registration into the free tier. Runs server-side (not via the browser's
+// anon key) so the free-tier profile row is seeded atomically with the account.
+// Email ownership is NOT yet verified (email_confirm: true) — a pre-launch item.
 app.post('/api/auth/signup', async (req, res) => {
-  const ip = (req.headers['x-forwarded-for'] || req.ip || '').toString().split(',')[0].trim();
+  const ip = clientIp(req);
   if (rateLimited('signup:' + ip)) {
     return res.status(429).json({ ok: false, error: 'Too many attempts. Try again in a minute.' });
   }
@@ -223,6 +254,36 @@ const FREE_CARDS = 50;
 async function getPlan(db, userId) {
   const { data } = await db.from('profiles').select('plan').eq('id', userId).maybeSingle();
   return (data && data.plan) || 'free';
+}
+
+// AI cost controls (protect against a Pro/compromised account looping paid Claude
+// calls). Two layers: a per-user burst limit (in-memory) and a durable rolling
+// 24h quota (DB-backed, survives deploys/replicas). Both tunable via env.
+const AI_BURST_PER_MIN = Number(process.env.AI_BURST_PER_MIN || 8);
+const AI_DAILY_LIMIT = Number(process.env.AI_DAILY_LIMIT || 50);
+async function aiQuotaLeft(db) {
+  const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+  // RLS scopes ai_usage to the caller, so the count is already per-user.
+  const { count } = await db.from('ai_usage').select('id', { count: 'exact', head: true }).gte('created_at', since);
+  return AI_DAILY_LIMIT - (count || 0);
+}
+function recordAiUsage(db, userId, kind) {
+  return db.from('ai_usage').insert({ user_id: userId, kind })
+    .then(({ error }) => { if (error) console.error('[ai_usage] log failed:', error.message); });
+}
+// Shared gate for the paid AI endpoints: Pro plan + burst limit + daily quota.
+// Returns a response-ending object when blocked, or null to proceed.
+async function aiGate(req) {
+  if ((await getPlan(req.db, req.user.id)) !== 'pro') {
+    return { status: 403, body: { ok: false, error: 'AI is a Pro feature — request access to unlock it.', code: 'needs_pro' } };
+  }
+  if (rateLimited('ai:' + req.user.id, AI_BURST_PER_MIN)) {
+    return { status: 429, body: { ok: false, error: 'You are generating too fast — give it a moment and try again.' } };
+  }
+  if ((await aiQuotaLeft(req.db)) <= 0) {
+    return { status: 429, body: { ok: false, error: 'Daily AI limit reached (' + AI_DAILY_LIMIT + '). It resets on a rolling 24-hour basis.', code: 'quota' } };
+  }
+  return null;
 }
 
 // List the caller's decks, newest first, each with its card count.
@@ -360,37 +421,112 @@ function stripHtml(s) {
     .trim();
 }
 
+// ── SSRF guard for user-supplied URL ingestion ──────────────────────────────
+// An authenticated user hands us a URL and we fetch it, so without this a request
+// could target the cloud metadata endpoint (169.254.169.254), localhost, or any
+// internal host and read the response back inside generated cards. We block
+// private/loopback/link-local/ULA/metadata targets and — because fetch follows
+// redirects — re-validate on EVERY hop, so a public URL can't 302 to an internal
+// one. (Residual: DNS rebinding between our lookup and fetch's own resolve is not
+// closed here; a pinned-IP dispatcher is the follow-up if this needs hardening.)
+function ipIsPrivate(ip) {
+  const mapped = ip.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i); // IPv4-mapped IPv6
+  if (mapped) ip = mapped[1];
+  if (net.isIPv4(ip)) {
+    const [a, b] = ip.split('.').map(Number);
+    if (a === 10 || a === 127 || a === 0) return true;        // private / loopback / this-network
+    if (a === 169 && b === 254) return true;                  // link-local incl. metadata 169.254.169.254
+    if (a === 172 && b >= 16 && b <= 31) return true;         // private
+    if (a === 192 && b === 168) return true;                  // private
+    if (a === 100 && b >= 64 && b <= 127) return true;        // CGNAT
+    return false;
+  }
+  if (net.isIPv6(ip)) {
+    const low = ip.toLowerCase();
+    if (low === '::1' || low === '::') return true;           // loopback / unspecified
+    if (low.startsWith('fe80')) return true;                  // link-local
+    if (low.startsWith('fc') || low.startsWith('fd')) return true; // unique-local fc00::/7
+    return false;
+  }
+  return true; // unparseable → treat as unsafe
+}
+
+async function assertPublicHost(hostname) {
+  const h = (hostname || '').toLowerCase();
+  if (!h || h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local') ||
+      h.endsWith('.internal') || h === 'metadata.google.internal') {
+    throw new Error('blocked-host');
+  }
+  if (net.isIP(h)) { // IP literal — check directly, no DNS
+    if (ipIsPrivate(h)) throw new Error('blocked-ip');
+    return;
+  }
+  let addrs;
+  try { addrs = await dns.lookup(h, { all: true }); }
+  catch { throw new Error('dns-fail'); }
+  if (!addrs.length) throw new Error('dns-fail');
+  for (const a of addrs) if (ipIsPrivate(a.address)) throw new Error('blocked-ip');
+}
+
+// Fetch with manual redirect following, validating the host at each hop.
+async function safeFetch(rawUrl, { maxRedirects = 4, timeoutMs = 15000 } = {}) {
+  let current = new URL(rawUrl);
+  for (let i = 0; i <= maxRedirects; i++) {
+    if (current.protocol !== 'http:' && current.protocol !== 'https:') throw new Error('bad-proto');
+    await assertPublicHost(current.hostname);
+    const resp = await fetch(current.href, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; KrakenoteBot/1.0; +https://krakenote.com)' },
+      redirect: 'manual',
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (resp.status >= 300 && resp.status < 400 && resp.headers.get('location')) {
+      current = new URL(resp.headers.get('location'), current); // resolve relative, re-check next loop
+      continue;
+    }
+    return { resp, finalUrl: current.href };
+  }
+  throw new Error('too-many-redirects');
+}
+
 async function fetchArticle(rawUrl) {
   let u;
   try { u = new URL(rawUrl); } catch { throw new Error('That does not look like a valid URL.'); }
   if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new Error('Only http(s) links are supported.');
   if (isYouTube(u)) return fetchYouTube(rawUrl);
 
-  // 1. Readability extraction — clean article body when the page is an article.
+  // All page fetching goes through the SSRF-guarded fetcher.
+  let resp, finalUrl;
   try {
-    const art = await extractArticle(rawUrl);
-    if (art && art.content) {
-      const text = stripHtml((art.title ? art.title + '\n\n' : '') + art.content);
-      if (text.length >= 200) return text;
+    ({ resp, finalUrl } = await safeFetch(u.href));
+  } catch (ex) {
+    const m = ex?.message || '';
+    if (m === 'blocked-host' || m === 'blocked-ip') {
+      throw new Error('That link points to a private or internal address, which is not allowed.');
     }
-  } catch (ex) { console.error('[ingest] article extract failed:', ex?.message); }
-
-  // 2. Fallback — raw fetch + strip tags. Handles product/app pages that
-  //    readability skips; the user reviews the resulting cards anyway.
-  let resp;
-  try {
-    resp = await fetch(u.href, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; KrakenoteBot/1.0; +https://krakenote.com)' },
-      signal: AbortSignal.timeout(15000),
-    });
-  } catch { throw new Error('Could not reach that link.'); }
+    if (m === 'dns-fail') throw new Error('Could not resolve that link.');
+    if (m === 'too-many-redirects') throw new Error('That link redirects too many times.');
+    throw new Error('Could not reach that link.');
+  }
   if (!resp.ok) {
     if (resp.status === 429 || resp.status === 403) {
       throw new Error('That site is blocking automated access. Try a different link, or copy the text and paste it in directly.');
     }
     throw new Error('Could not fetch that link (HTTP ' + resp.status + ').');
   }
-  const text = stripHtml((await resp.text()).slice(0, 3_000_000));
+  const html = (await resp.text()).slice(0, 3_000_000);
+
+  // 1. Readability on the HTML we already fetched — never let the extractor fetch
+  //    on its own, or it would bypass the SSRF guard above.
+  try {
+    const art = await extractFromHtml(html, finalUrl);
+    if (art && art.content) {
+      const text = stripHtml((art.title ? art.title + '\n\n' : '') + art.content);
+      if (text.length >= 200) return text;
+    }
+  } catch (ex) { console.error('[ingest] article extract failed:', ex?.message); }
+
+  // 2. Fallback — strip tags from the same HTML (product/app pages readability skips).
+  const text = stripHtml(html);
   if (text.length < 100) {
     throw new Error("Couldn't pull readable text from that page — try a link with more article text, or paste the text directly.");
   }
@@ -466,9 +602,8 @@ app.post('/api/decks/:id/generate', requireUser, async (req, res) => {
   if (!anthropic) {
     return res.status(503).json({ ok: false, error: 'AI generation is not configured on this server yet.' });
   }
-  if ((await getPlan(req.db, req.user.id)) !== 'pro') {
-    return res.status(403).json({ ok: false, error: 'AI generation is a Pro feature — request access to unlock it.', code: 'needs_pro' });
-  }
+  const gate = await aiGate(req);
+  if (gate) return res.status(gate.status).json(gate.body);
   const deckId = req.params.id;
 
   // Confirm the deck is the caller's before spending an AI call on it.
@@ -520,6 +655,8 @@ app.post('/api/decks/:id/generate', requireUser, async (req, res) => {
       hint: c?.hint ? String(c.hint).slice(0, 500) : '',
     }))
     .filter((c) => c.front && c.back);
+
+  await recordAiUsage(req.db, req.user.id, 'generate'); // count the paid call against the quota
 
   return res.json({
     ok: true,
@@ -656,9 +793,8 @@ const FACTCHECK_SYSTEM =
 
 app.post('/api/cards/:id/factcheck', requireUser, async (req, res) => {
   if (!anthropic) return res.status(503).json({ ok: false, error: 'AI is not configured on this server yet.' });
-  if ((await getPlan(req.db, req.user.id)) !== 'pro') {
-    return res.status(403).json({ ok: false, error: 'Fact-check is a Pro feature — request access to unlock it.', code: 'needs_pro' });
-  }
+  const gate = await aiGate(req);
+  if (gate) return res.status(gate.status).json(gate.body);
   const { data: card, error } = await req.db.from('cards').select('front, back').eq('id', req.params.id).maybeSingle();
   if (error || !card) return res.status(404).json({ ok: false, error: 'Card not found.' });
 
@@ -678,6 +814,7 @@ app.post('/api/cards/:id/factcheck', requireUser, async (req, res) => {
     console.error('[factcheck] failed:', ex?.message);
     return res.status(502).json({ ok: false, error: 'Fact-check failed. Please try again.' });
   }
+  await recordAiUsage(req.db, req.user.id, 'factcheck'); // count the paid call against the quota
   return res.json({
     ok: true,
     accurate: !!result.accurate,
@@ -885,7 +1022,7 @@ app.post('/api/decks/:id/cards/reorder', requireUser, async (req, res) => {
 // POST /api/admin/login { email, password } -> { token, name }
 // Verifies the password via Supabase Auth, gated on the superuser allowlist.
 app.post('/api/admin/login', async (req, res) => {
-  const ip = (req.headers['x-forwarded-for'] || req.ip || '').toString().split(',')[0].trim();
+  const ip = clientIp(req);
   if (rateLimited('login:' + ip)) {
     return res.status(429).json({ ok: false, error: 'Too many attempts. Try again in a minute.' });
   }

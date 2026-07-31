@@ -64,3 +64,40 @@ review) remains before opening the web app to real users — tracked below.
 - **youtube-transcript** — "paste a YouTube link" ingestion source.
 - **OCR** — not needed separately; Claude vision handles images.
 - **Later:** ElevenLabs / OpenAI TTS (audio study mode); Stripe / RevenueCat (billing).
+
+---
+
+## Platform & access decisions (2026-07-30)
+
+**Mobile** = React Native + **Expo** (Metro), in a **separate repo** (`krakenote-mobile`),
+sharing this backend + `docs/API.md`. Web frontend stays as-is. No on-device OCR needed —
+images go to Claude vision server-side (already built).
+
+### Access model — cost-safe freemium (gate the AI, not the app) (⬜ confirm before building)
+Only Claude calls (generation + fact-check) cost money; everything else is free to serve.
+So DON'T block the whole app behind approval — block only the AI.
+- Anyone registers (email/password or Google) → gets a **free tier** immediately.
+- **Free tier:** manual decks/cards, CSV import, review (FSRS), quizzes. **No AI. Zero Claude cost.**
+  Light caps (tunable): ~2 decks / ~50 manual cards.
+- **AI generation + fact-check = premium**, gated behind **admin approval** now → **paid Pro** later.
+  Non-enabled user taps Generate → "AI is a Pro feature, request access" prompt (no Claude call).
+- Admin approves from dashboard → unlocks AI (and/or a trial quota).
+- Impl: `profiles.plan` ('free' default | 'pro'/'approved') or `ai_enabled` flag; server-side
+  block on `/generate` + `/factcheck` for free users (clear 403); client shows upgrade prompt;
+  enforce free-tier deck/card caps; admin approve/upgrade action. Matches PRD §11 freemium.
+  The per-user AI cost cap becomes the trial/Pro quota.
+
+### Auth (⬜)
+- ⬜ **Google login — web** (Supabase Google provider) and mobile
+- ⬜ Sign in with Apple — mobile (iOS)
+- Email/password already works (web); reuse on mobile.
+
+### Decisions locked
+- AI generation stays in the **Express server** (mobile calls the same endpoints — no Edge Function).
+- Mobile is **online-first** for v1 (offline review is a later add). ← default; confirm.
+
+### Release-readiness blockers (must clear before ANY public release — web or mobile)
+- ⬜ **Production setup** — run migrations + set anon/Anthropic keys on prod (blocks mobile distribution too)
+- ⬜ Access/signup security (approval model above; remove email-confirm loophole)
+- ⬜ Per-user AI generation cost cap
+- ⬜ Security review

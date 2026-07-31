@@ -155,26 +155,11 @@ app.post('/api/auth/signup', async (req, res) => {
     return res.status(400).json({ ok: false, error: 'Password must be at least 8 characters.' });
   }
 
-  // Gate: must already be on the waitlist.
-  const { data: listed, error: listErr } = await supabase
-    .from('waitlist')
-    .select('email')
-    .eq('email', email)
-    .maybeSingle();
-
-  if (listErr) {
-    console.error('[signup] waitlist lookup failed:', listErr.message);
-    return res.status(500).json({ ok: false, error: 'Something went wrong. Please try again.' });
-  }
-  if (!listed) {
-    return res.status(403).json({ ok: false, error: 'not_on_waitlist' });
-  }
-
-  // email_confirm: true — the waitlist is the gate, so we skip the confirmation
-  // round-trip (Supabase's default SMTP is rate-limited and unconfigured here).
-  // TRADE-OFF: anyone who knows a waitlisted address can claim that account first.
-  // Acceptable pre-launch; revisit before the app holds real user data.
-  const { error: createErr } = await supabase.auth.admin.createUser({
+  // Open signup: anyone can register into the FREE tier (manual study loop, no
+  // AI, no Claude cost). email_confirm: true skips the SMTP round-trip — real
+  // email verification is a pre-launch hardening item. AI access is gated
+  // separately by plan (admin approval → 'pro').
+  const { data: created, error: createErr } = await supabase.auth.admin.createUser({
     email,
     password,
     email_confirm: true,
@@ -187,6 +172,12 @@ app.post('/api/auth/signup', async (req, res) => {
     }
     console.error('[signup] createUser failed:', createErr.message);
     return res.status(500).json({ ok: false, error: 'Could not create your account. Please try again.' });
+  }
+
+  // Seed a free-tier profile row.
+  if (created?.user?.id) {
+    await supabase.from('profiles').upsert({ id: created.user.id, plan: 'free' }, { onConflict: 'id' })
+      .then(({ error: e }) => { if (e) console.error('[signup] profile seed failed:', e.message); });
   }
 
   return res.json({ ok: true });
@@ -226,6 +217,14 @@ async function requireUser(req, res, next) {
   return next();
 }
 
+// Freemium: free tier = manual study loop, no AI. 'pro' unlocks AI + higher caps.
+const FREE_DECKS = 2;
+const FREE_CARDS = 50;
+async function getPlan(db, userId) {
+  const { data } = await db.from('profiles').select('plan').eq('id', userId).maybeSingle();
+  return (data && data.plan) || 'free';
+}
+
 // List the caller's decks, newest first, each with its card count.
 app.get('/api/decks', requireUser, async (req, res) => {
   const { data, error } = await req.db
@@ -255,6 +254,13 @@ app.post('/api/decks', requireUser, async (req, res) => {
   const subject = typeof req.body?.subject === 'string' ? req.body.subject.trim() : '';
   if (!title) return res.status(400).json({ ok: false, error: 'A deck title is required.' });
   if (title.length > 120) return res.status(400).json({ ok: false, error: 'Title is too long (max 120 characters).' });
+
+  if ((await getPlan(req.db, req.user.id)) !== 'pro') {
+    const { count } = await req.db.from('decks').select('id', { count: 'exact', head: true });
+    if ((count || 0) >= FREE_DECKS) {
+      return res.status(403).json({ ok: false, error: 'The free plan is limited to ' + FREE_DECKS + ' decks — request access for unlimited.', code: 'free_limit' });
+    }
+  }
 
   const { data, error } = await req.db
     .from('decks')
@@ -460,6 +466,9 @@ app.post('/api/decks/:id/generate', requireUser, async (req, res) => {
   if (!anthropic) {
     return res.status(503).json({ ok: false, error: 'AI generation is not configured on this server yet.' });
   }
+  if ((await getPlan(req.db, req.user.id)) !== 'pro') {
+    return res.status(403).json({ ok: false, error: 'AI generation is a Pro feature — request access to unlock it.', code: 'needs_pro' });
+  }
   const deckId = req.params.id;
 
   // Confirm the deck is the caller's before spending an AI call on it.
@@ -540,6 +549,13 @@ app.post('/api/decks/:id/cards', requireUser, async (req, res) => {
     .filter((c) => c.front && c.back);
 
   if (!rows.length) return res.status(400).json({ ok: false, error: 'No cards to add.' });
+
+  if ((await getPlan(req.db, req.user.id)) !== 'pro') {
+    const { count } = await req.db.from('cards').select('id', { count: 'exact', head: true });
+    if ((count || 0) + rows.length > FREE_CARDS) {
+      return res.status(403).json({ ok: false, error: 'The free plan is limited to ' + FREE_CARDS + ' cards — request access for unlimited.', code: 'free_limit' });
+    }
+  }
 
   // Record the source these cards came from (summary + metadata; no raw text kept for alpha).
   const src = req.body?.source;
@@ -640,6 +656,9 @@ const FACTCHECK_SYSTEM =
 
 app.post('/api/cards/:id/factcheck', requireUser, async (req, res) => {
   if (!anthropic) return res.status(503).json({ ok: false, error: 'AI is not configured on this server yet.' });
+  if ((await getPlan(req.db, req.user.id)) !== 'pro') {
+    return res.status(403).json({ ok: false, error: 'Fact-check is a Pro feature — request access to unlock it.', code: 'needs_pro' });
+  }
   const { data: card, error } = await req.db.from('cards').select('front, back').eq('id', req.params.id).maybeSingle();
   if (error || !card) return res.status(404).json({ ok: false, error: 'Card not found.' });
 
@@ -803,12 +822,31 @@ app.get('/api/stats', requireUser, async (req, res) => {
 
 // Profile (first/last name). Email comes from the verified token, not the table.
 app.get('/api/profile', requireUser, async (req, res) => {
-  const { data, error } = await req.db.from('profiles').select('first_name, last_name').eq('id', req.user.id).maybeSingle();
+  const { data, error } = await req.db.from('profiles').select('first_name, last_name, plan, access_requested_at').eq('id', req.user.id).maybeSingle();
   if (error) {
     console.error('[profile] load failed:', error.message);
     return res.status(500).json({ ok: false, error: 'Could not load your profile.' });
   }
-  return res.json({ ok: true, email: req.user.email, firstName: data?.first_name || '', lastName: data?.last_name || '' });
+  return res.json({
+    ok: true,
+    email: req.user.email,
+    firstName: data?.first_name || '',
+    lastName: data?.last_name || '',
+    plan: data?.plan || 'free',
+    accessRequested: !!data?.access_requested_at,
+  });
+});
+
+// Free user asks for AI access — flags the account for the admin approval queue.
+app.post('/api/request-access', requireUser, async (req, res) => {
+  const { error } = await req.db
+    .from('profiles')
+    .upsert({ id: req.user.id, access_requested_at: new Date().toISOString() }, { onConflict: 'id' });
+  if (error) {
+    console.error('[access] request failed:', error.message);
+    return res.status(500).json({ ok: false, error: 'Could not submit your request.' });
+  }
+  return res.json({ ok: true });
 });
 
 app.patch('/api/profile', requireUser, async (req, res) => {
@@ -942,6 +980,43 @@ app.get('/api/admin/waitlist.csv', requireSuperuser, async (_req, res) => {
   res.set('Content-Type', 'text/csv; charset=utf-8');
   res.set('Content-Disposition', 'attachment; filename="krakenote-waitlist.csv"');
   return res.send(csv);
+});
+
+// Admin: list users (profiles + emails), access-requests first — the approval queue.
+app.get('/api/admin/users', requireSuperuser, async (_req, res) => {
+  const { data: profs, error } = await supabase
+    .from('profiles')
+    .select('id, first_name, last_name, plan, access_requested_at')
+    .order('access_requested_at', { ascending: false, nullsFirst: false });
+  if (error) {
+    console.error('[admin] users query failed:', error.message);
+    return res.status(500).json({ ok: false, error: 'Failed to load users.' });
+  }
+  const emailById = {};
+  try {
+    const { data: list } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+    (list?.users || []).forEach((u) => { emailById[u.id] = u.email; });
+  } catch (ex) { console.error('[admin] listUsers failed:', ex?.message); }
+  const users = (profs || []).map((p) => ({
+    id: p.id,
+    email: emailById[p.id] || '',
+    firstName: p.first_name || '',
+    lastName: p.last_name || '',
+    plan: p.plan || 'free',
+    accessRequestedAt: p.access_requested_at,
+  }));
+  return res.json({ ok: true, users });
+});
+
+// Admin: set a user's plan — approve (→ 'pro') or revoke (→ 'free').
+app.post('/api/admin/users/:id/plan', requireSuperuser, async (req, res) => {
+  const plan = req.body?.plan === 'pro' ? 'pro' : 'free';
+  const { error } = await supabase.from('profiles').upsert({ id: req.params.id, plan }, { onConflict: 'id' });
+  if (error) {
+    console.error('[admin] set plan failed:', error.message);
+    return res.status(500).json({ ok: false, error: 'Could not update the user.' });
+  }
+  return res.json({ ok: true, plan });
 });
 
 // Brand icons, served straight from brand/ so there is no duplicated copy to

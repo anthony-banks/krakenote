@@ -429,9 +429,23 @@ function stripHtml(s) {
 // redirects — re-validate on EVERY hop, so a public URL can't 302 to an internal
 // one. (Residual: DNS rebinding between our lookup and fetch's own resolve is not
 // closed here; a pinned-IP dispatcher is the follow-up if this needs hardening.)
+// An IPv4 tunnelled inside IPv6 (::ffff:1.2.3.4, or its hex form ::ffff:a9fe:a9fe
+// that WHATWG URL normalizes to, and IPv4-compatible ::a9fe:a9fe) must be judged by
+// its embedded IPv4, or the metadata/loopback IPs sail through the v6 checks. Returns
+// the dotted IPv4 when one is embedded, else the input unchanged.
+function embeddedV4(s) {
+  const dotted = s.match(/^::(?:ffff:)?(\d+\.\d+\.\d+\.\d+)$/);
+  if (dotted) return dotted[1];
+  const hex = s.match(/^::(?:ffff:)?([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+  if (hex) {
+    const hi = parseInt(hex[1], 16), lo = parseInt(hex[2], 16);
+    return `${(hi >> 8) & 0xff}.${hi & 0xff}.${(lo >> 8) & 0xff}.${lo & 0xff}`;
+  }
+  return s;
+}
+
 function ipIsPrivate(ip) {
-  const mapped = ip.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i); // IPv4-mapped IPv6
-  if (mapped) ip = mapped[1];
+  ip = embeddedV4(ip.toLowerCase()); // unwrap IPv4-mapped/compatible IPv6 to its v4
   if (net.isIPv4(ip)) {
     const [a, b] = ip.split('.').map(Number);
     if (a === 10 || a === 127 || a === 0) return true;        // private / loopback / this-network

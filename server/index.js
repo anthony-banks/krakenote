@@ -452,7 +452,9 @@ function ipIsPrivate(ip) {
 }
 
 async function assertPublicHost(hostname) {
-  const h = (hostname || '').toLowerCase();
+  // WHATWG URL keeps IPv6 literals bracketed (e.g. "[::1]"); strip so net.isIP
+  // recognizes them, otherwise they'd fall through to the DNS path.
+  const h = (hostname || '').replace(/^\[/, '').replace(/\]$/, '').toLowerCase();
   if (!h || h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local') ||
       h.endsWith('.internal') || h === 'metadata.google.internal') {
     throw new Error('blocked-host');

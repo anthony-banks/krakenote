@@ -91,6 +91,11 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   .pw-wrap input{margin-bottom:0!important;padding-right:62px}
   .pw-toggle{position:absolute;right:6px;top:0;height:100%;display:inline-flex;align-items:center;background:transparent;border:0;color:var(--muted);cursor:pointer;font-family:var(--head);font-weight:600;font-size:13px;padding:0 8px}
   .pw-toggle:hover{color:var(--accent)}
+  .auth-or{display:flex;align-items:center;text-align:center;color:var(--muted);font-size:12px;margin:16px 0}
+  .auth-or::before,.auth-or::after{content:'';flex:1;height:1px;background:var(--border)}
+  .auth-or span{padding:0 12px}
+  .btn-google{width:100%;justify-content:center;background:var(--surface);color:var(--text);border:1.5px solid var(--border);box-shadow:none}
+  .btn-google:hover{border-color:var(--accent);transform:none;box-shadow:none}
   .auth .btn-primary{width:100%}
   .msg{display:none;font-family:var(--head);font-weight:600;font-size:14px;margin-bottom:14px;padding:11px 14px;border-radius:12px;line-height:1.45}
   .msg.err{display:block;color:var(--danger);background:color-mix(in srgb,var(--danger) 12%,transparent);border:1px solid color-mix(in srgb,var(--danger) 30%,transparent)}
@@ -357,6 +362,9 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       <button class="btn btn-primary" type="submit" id="authBtn">Sign in</button>
     </form>
 
+    <div class="auth-or"><span>or</span></div>
+    <button class="btn btn-google" id="googleBtn" type="button">Continue with Google</button>
+
     <div class="switch">
       <span id="switchText">New here?</span>
       <button type="button" id="switchBtn">Create an account</button>
@@ -471,6 +479,8 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       <div class="panel-head"><i class="ic" style="--i:url(/icons/profile.svg)"></i><h2>Account</h2></div>
       <div class="acct-body">
         <div class="acct-row"><span class="acct-label">Signed in as</span><span id="acctEmail">—</span></div>
+        <div class="acct-row"><span class="acct-label">Plan</span><span id="acctPlan">Free</span></div>
+        <button class="btn btn-primary hidden" id="acctUpgradeBtn" type="button" style="margin-top:10px">Request AI access</button>
         <div class="acct-sep"></div>
         <h3 class="acct-h">Your name</h3>
         <input type="text" id="acctFirst" placeholder="First name" autocomplete="given-name" />
@@ -678,6 +688,16 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       <div class="modal-actions"><button class="linkbtn" id="confirmCancel" type="button">Cancel</button><button class="btn btn-primary" id="confirmOk" type="button">Confirm</button></div>
     </div>
   </div>
+
+  <!-- Upgrade / request-access modal (free tier) -->
+  <div class="modal-overlay hidden" id="upgradeModal">
+    <div class="modal-box">
+      <div class="modal-title">Krakenote Pro</div>
+      <div class="modal-body" id="upgradeBody"></div>
+      <div id="upgradeMsg" style="font-size:13px;color:var(--accent);min-height:18px"></div>
+      <div class="modal-actions"><button class="linkbtn" id="upgradeClose" type="button">Close</button><button class="btn btn-primary" id="upgradeReqBtn" type="button">Request access</button></div>
+    </div>
+  </div>
 </div>
 
 <script src="/vendor/supabase.js"></script>
@@ -799,6 +819,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   async function onSignedIn(session){
     greet(session.user);
     show('appView');
+    await loadPlan();
     renderView('home'); // loads real stats via /api/stats
   }
 
@@ -897,6 +918,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     btn.disabled = false;
     if (out.res.status === 401){ signOut(); return; }
     if (!out.res.ok || !out.data.ok){
+      if (out.data.code === 'free_limit'){ hideDeckForm(); openUpgrade(null); return; }
       m.className = 'msg err'; m.textContent = out.data.error || 'Could not create the deck.'; return;
     }
     $('deckTitle').value = ''; $('deckSubject').value = '';
@@ -973,7 +995,10 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     }
     btn.disabled = false;
     if (out.res.status === 401){ signOut(); return; }
-    if (!out.res.ok || !out.data.ok){ msgOn('cmMsg', 'err', out.data.error || 'Could not save the card.'); return; }
+    if (!out.res.ok || !out.data.ok){
+      if (out.data.code === 'free_limit'){ $('cardModal').classList.add('hidden'); openUpgrade(null); return; }
+      msgOn('cmMsg', 'err', out.data.error || 'Could not save the card.'); return;
+    }
     $('cardModal').classList.add('hidden');
     await loadCards();
   }
@@ -988,6 +1013,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   // ── Fact-check (verify against general knowledge; opposite of strict generation) ──
   var factCardId = null, factSuggestion = null;
   async function factCheckCard(card){
+    if (!isPro()){ openUpgrade('Fact-check'); return; }
     factCardId = card.id; factSuggestion = null;
     $('factApply').classList.add('hidden');
     $('factBody').innerHTML = '<span class="spinner"></span> Checking this card against general knowledge…';
@@ -1128,6 +1154,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     var out = await api('/api/decks/' + encodeURIComponent(currentDeck.id) + '/cards', { method:'POST', body: JSON.stringify({ cards: cards }) });
     if (out.res.status === 401){ signOut(); return; }
     if (out.res.ok && out.data.ok){ await loadCards(); window.alert('Imported ' + out.data.added + ' card' + (out.data.added === 1 ? '' : 's') + '.'); }
+    else if (out.data.code === 'free_limit'){ openUpgrade(null); }
     else window.alert(out.data.error || 'Import failed.');
   }
   function mkCardAct(title, icon, danger){
@@ -1256,6 +1283,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   }
 
   async function generate(){
+    if (!isPro()){ openUpgrade('AI card generation'); return; }
     var text = ($('genText').value || '').trim();
     var url = ($('genUrl').value || '').trim();
     var files = (droppedFiles && droppedFiles.length) ? droppedFiles.slice() : Array.prototype.slice.call(($('genFile').files) || []);
@@ -1353,7 +1381,10 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       { method:'POST', body: JSON.stringify({ cards: cards, source: proposedSource }) });
     btn.disabled = false;
     if (out.res.status === 401){ signOut(); return; }
-    if (!out.res.ok || !out.data.ok){ msgOn('genMsg', 'err', out.data.error || 'Could not add the cards.'); return; }
+    if (!out.res.ok || !out.data.ok){
+      if (out.data.code === 'free_limit'){ openUpgrade(null); return; }
+      msgOn('genMsg', 'err', out.data.error || 'Could not add the cards.'); return;
+    }
 
     msgOn('genMsg', 'ok', 'Added ' + out.data.added + ' card' + (out.data.added === 1 ? '' : 's') + ' to the deck.');
     $('genText').value = ''; $('genFile').value = ''; $('genUrl').value = ''; droppedFiles = [];
@@ -1584,8 +1615,37 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     pickDeckList($('uploadDeckList'), decks, function(d){ openDeck(d); });
   }
 
-  // ── Account ──
+  // ── Account & plan ──
   var currentUserEmail = '';
+  var currentPlan = 'free', accessRequested = false;
+  function isPro(){ return currentPlan === 'pro'; }
+  async function loadPlan(){
+    var out = await api('/api/profile');
+    if (out.res.ok && out.data.ok){
+      currentPlan = out.data.plan || 'free';
+      accessRequested = !!out.data.accessRequested;
+      if (out.data.email) currentUserEmail = out.data.email;
+    }
+  }
+  function updateUpgradeBtn(){
+    var b = $('upgradeReqBtn');
+    if (accessRequested){ b.textContent = 'Access requested ✓'; b.disabled = true; }
+    else { b.textContent = 'Request access'; b.disabled = false; }
+  }
+  function openUpgrade(feature){
+    $('upgradeBody').innerHTML = (feature ? '<b>' + feature + '</b> is part of Krakenote Pro. ' : "You've hit a free-plan limit. ") +
+      'The free plan lets you build decks and study manually (up to 2 decks / 50 cards). AI generation, fact-check, and higher limits unlock with Pro — request access and we\'ll review it.';
+    $('upgradeMsg').textContent = accessRequested ? 'Your access request is pending review.' : '';
+    updateUpgradeBtn();
+    $('upgradeModal').classList.remove('hidden');
+  }
+  async function requestAccess(){
+    var b = $('upgradeReqBtn'); b.disabled = true;
+    var out = await api('/api/request-access', { method:'POST', body: '{}' });
+    if (out.res.status === 401){ signOut(); return; }
+    if (out.res.ok && out.data.ok){ accessRequested = true; updateUpgradeBtn(); $('upgradeMsg').textContent = 'Request submitted — we\'ll review it and email you.'; }
+    else { b.disabled = false; $('upgradeMsg').textContent = out.data.error || 'Could not submit. Try again.'; }
+  }
   async function loadAccount(){
     $('acctEmail').textContent = currentUserEmail || '—';
     $('acctPw').value = ''; $('acctFirst').value = ''; $('acctLast').value = '';
@@ -1596,6 +1656,11 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       $('acctFirst').value = out.data.firstName || '';
       $('acctLast').value = out.data.lastName || '';
       if (out.data.email){ currentUserEmail = out.data.email; $('acctEmail').textContent = out.data.email; }
+      currentPlan = out.data.plan || 'free';
+      accessRequested = !!out.data.accessRequested;
+      $('acctPlan').textContent = currentPlan === 'pro' ? 'Pro — AI unlocked' : 'Free — manual study';
+      $('acctUpgradeBtn').classList.toggle('hidden', currentPlan === 'pro');
+      $('acctUpgradeBtn').textContent = accessRequested ? 'Access requested ✓' : 'Request AI access';
     }
   }
   async function saveName(){
@@ -1692,6 +1757,14 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   // Account
   $('acctPwBtn').addEventListener('click', changePassword);
   $('acctSignout').addEventListener('click', signOut);
+  $('acctUpgradeBtn').addEventListener('click', function(){ openUpgrade(null); });
+  $('upgradeClose').addEventListener('click', function(){ $('upgradeModal').classList.add('hidden'); });
+  $('upgradeReqBtn').addEventListener('click', requestAccess);
+  $('googleBtn').addEventListener('click', async function(){
+    if (!sb) return;
+    try { await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin + '/app' } }); }
+    catch (ex){ setMsg('err', 'Google sign-in is not available yet.'); }
+  });
   // Card management
   $('addCardBtn').addEventListener('click', function(){ openCardEditor(null); });
   $('cmSave').addEventListener('click', saveCard);

@@ -173,6 +173,24 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
         </table>
       </div>
     </div>
+
+    <div class="panel" style="margin-top:24px">
+      <div class="panel-head">
+        <h2>Users &amp; access</h2>
+        <button id="usersRefresh" class="linkbtn" type="button">↻ Refresh</button>
+      </div>
+      <div id="usersState" class="state">
+        <span class="emoji">🐙</span><h3>Loading…</h3><p>Fetching users.</p>
+      </div>
+      <div id="usersWrap" class="table-scroll hidden">
+        <table>
+          <thead>
+            <tr><th>Email</th><th>Name</th><th>Plan</th><th>Access requested</th><th></th></tr>
+          </thead>
+          <tbody id="userRows"></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 </main>
 
@@ -250,9 +268,60 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     $('tableWrap').classList.remove('hidden');
   }
 
+  function usersState(emoji, title, body){
+    $('usersWrap').classList.add('hidden');
+    var s = $('usersState'); s.classList.remove('hidden');
+    s.innerHTML = '<span class="emoji">' + emoji + '</span><h3></h3><p></p>';
+    s.querySelector('h3').textContent = title; s.querySelector('p').textContent = body;
+  }
+  async function loadUsers(){
+    if (!getToken()) return;
+    usersState('🐙', 'Loading…', 'Fetching users.');
+    try {
+      var res = await fetch('/api/admin/users', { headers: authHeaders(), cache: 'no-store' });
+      if (res.status === 401){ clearToken(); showLogin('Your session expired. Please sign in again.'); return; }
+      if (!res.ok){ usersState('⚠️', 'Something went wrong', 'Could not load users (HTTP ' + res.status + ').'); return; }
+      var data = await res.json();
+      renderUsers(data.users || []);
+    } catch (ex){ usersState('⚠️', 'Network error', 'Could not reach the server.'); }
+  }
+  function renderUsers(users){
+    if (!users.length){ usersState('👤', 'No users yet', 'Registered users will appear here.'); return; }
+    var tb = $('userRows'); tb.innerHTML = '';
+    users.forEach(function(u){
+      var tr = document.createElement('tr');
+      var email = document.createElement('td'); email.className = 'email'; email.textContent = u.email || u.id.slice(0, 8);
+      var name = document.createElement('td'); name.textContent = ((u.firstName || '') + ' ' + (u.lastName || '')).trim() || '—';
+      var plan = document.createElement('td');
+      var tag = document.createElement('span'); tag.className = 'tag'; tag.textContent = u.plan === 'pro' ? 'Pro' : 'Free'; plan.appendChild(tag);
+      var req = document.createElement('td'); req.textContent = u.accessRequestedAt ? fmtDate(u.accessRequestedAt) : '—';
+      var act = document.createElement('td');
+      var btn = document.createElement('button'); btn.type = 'button';
+      if (u.plan === 'pro'){ btn.className = 'linkbtn'; btn.textContent = 'Revoke'; btn.addEventListener('click', function(){ setPlan(u.id, 'free', btn); }); }
+      else { btn.className = 'btn btn-primary'; btn.style.fontSize = '13px'; btn.style.padding = '8px 16px'; btn.textContent = 'Approve'; btn.addEventListener('click', function(){ setPlan(u.id, 'pro', btn); }); }
+      act.appendChild(btn);
+      tr.appendChild(email); tr.appendChild(name); tr.appendChild(plan); tr.appendChild(req); tr.appendChild(act);
+      tb.appendChild(tr);
+    });
+    $('usersState').classList.add('hidden'); $('usersWrap').classList.remove('hidden');
+  }
+  async function setPlan(id, plan, btn){
+    btn.disabled = true;
+    try {
+      var res = await fetch('/api/admin/users/' + encodeURIComponent(id) + '/plan', {
+        method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
+        body: JSON.stringify({ plan: plan }),
+      });
+      if (res.status === 401){ clearToken(); showLogin('Session expired. Sign in again.'); return; }
+      if (!res.ok){ btn.disabled = false; alert('Could not update the user.'); return; }
+      await loadUsers();
+    } catch (ex){ btn.disabled = false; alert('Network error.'); }
+  }
+
   async function loadData(){
     if (!getToken()){ showLogin(); return; }
     showDash();
+    loadUsers();
     setState('🐙', 'Loading…', 'Fetching waitlist signups.');
     try {
       var res = await fetch('/api/admin/waitlist', { headers: authHeaders(), cache: 'no-store' });
@@ -317,6 +386,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   });
   $('signout').addEventListener('click', function(){ clearToken(); try{ sessionStorage.removeItem('kn_admin_name'); }catch(e){} showLogin(); });
   $('refreshBtn').addEventListener('click', loadData);
+  $('usersRefresh').addEventListener('click', loadUsers);
   $('csvBtn').addEventListener('click', downloadCsv);
 
   // Boot

@@ -1044,7 +1044,10 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
 
   function msgOn(id, kind, html){
     var m = $(id); m.className = 'msg' + (kind ? ' ' + kind : '');
-    m.innerHTML = html || ''; if (!kind) m.style.display = 'none';
+    m.innerHTML = html || '';
+    // Show whenever there's a kind; hide only when clearing. (Previously a prior
+    // clear left inline display:none set, so later errors were set but invisible.)
+    m.style.display = kind ? '' : 'none';
   }
   function cardsState(emoji, title, body){
     var s = $('cardsState'); s.classList.remove('hidden');
@@ -1064,6 +1067,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     $('deckDetailPanel').classList.remove('hidden');
     $('deckDetailTitle').textContent = d.title;
     $('genText').value = ''; $('genFile').value = ''; $('genUrl').value = ''; droppedFiles = [];
+    sigSeen = {}; // dup guard is scoped to the deck currently open
     $('dropHint').textContent = 'Tip: drag a PDF, image, .docx, or .pptx onto this box.';
     msgOn('genMsg', null, ''); $('genSummary').classList.add('hidden'); $('genPreview').classList.add('hidden');
     $('deckOverview').classList.add('hidden');
@@ -1221,6 +1225,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   }
   async function loadSources(){
+    deckSigs = {}; // rebuilt from the deck's saved sources for the dup guard
     var ov = $('deckOverview');
     var out;
     try { out = await api('/api/decks/' + encodeURIComponent(currentDeck.id) + '/sources'); }
@@ -1228,6 +1233,10 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     if (out.res.status === 401){ signOut(); return; }
     if (!out.res.ok || !out.data.ok){ ov.classList.add('hidden'); return; }
     var sources = out.data.sources || [];
+    sources.forEach(function(s){
+      if (s.kind === 'url' || s.kind === 'youtube'){ if (s.filename) deckSigs['url|' + normUrlSig(s.filename)] = true; }
+      else if (s.filename){ deckSigs['file|' + s.filename.toLowerCase()] = true; }
+    });
     if (!sources.length){ ov.classList.add('hidden'); return; }
     var list = $('ovList'); list.innerHTML = '';
     sources.forEach(function(s){
@@ -1282,12 +1291,42 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     return 'file';
   }
 
+  // ── Duplicate-submission guard ──────────────────────────────────────────
+  // Warn (don't block) when the user generates from material already used in THIS
+  // deck — a re-submitted link/file/notes just makes duplicate cards. deckSigs =
+  // sources already saved to the deck; sigSeen = things generated this session.
+  var sigSeen = {}, deckSigs = {};
+  function normUrlSig(u){
+    try { var x = new URL(u); return (x.host + x.pathname).replace(/\/+$/, '').toLowerCase() + x.search.toLowerCase(); }
+    catch (e){ return (u || '').trim().toLowerCase(); }
+  }
+  function normTextSig(t){ return (t || '').replace(/\s+/g, ' ').trim().toLowerCase().slice(0, 200); }
+  function inputSignatures(text, url, files){
+    if (url) return { sigs: ['url|' + normUrlSig(url)], label: 'this link' };
+    if (files && files.length) return { sigs: files.map(function(f){ return 'file|' + (f.name || '').toLowerCase(); }), label: files.length > 1 ? 'these files' : 'this file' };
+    if (text) return { sigs: ['text|' + normTextSig(text)], label: 'these notes' };
+    return { sigs: [], label: '' };
+  }
+  function firstDuplicate(sigs){
+    for (var i = 0; i < sigs.length; i++){ if (sigSeen[sigs[i]] || deckSigs[sigs[i]]) return sigs[i]; }
+    return null;
+  }
+
   async function generate(){
     if (!isPro()){ openUpgrade('AI card generation'); return; }
     var text = ($('genText').value || '').trim();
     var url = ($('genUrl').value || '').trim();
     var files = (droppedFiles && droppedFiles.length) ? droppedFiles.slice() : Array.prototype.slice.call(($('genFile').files) || []);
     if (!text && !url && !files.length){ msgOn('genMsg', 'err', 'Paste notes, a link, or choose file(s) first.'); return; }
+    var info = inputSignatures(text, url, files);
+    if (firstDuplicate(info.sigs)){
+      showConfirm('Duplicate material?', 'You already generated cards from ' + info.label + ' in this deck. Generating again will create duplicate cards. Generate anyway?', 'Generate again', function(){ doGenerate(text, url, files, info.sigs); });
+      return;
+    }
+    doGenerate(text, url, files, info.sigs);
+  }
+
+  async function doGenerate(text, url, files, sigs){
     var cardType = (document.querySelector('input[name=cardType]:checked') || {}).value || 'mix';
 
     var btn = $('genBtn'); btn.disabled = true;
@@ -1321,6 +1360,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       if (!allCards.length){ msgOn('genMsg', 'err', 'Could not make cards from that. Try adding more material.'); return; }
       if (summaries.length){ var s = $('genSummary'); s.classList.remove('hidden'); s.textContent = 'Summary — ' + summaries.join('  •  '); }
       proposedSource = srcMeta;
+      (sigs || []).forEach(function(s){ if (s) sigSeen[s] = true; }); // remember for the dup guard
       renderPreview(allCards);
     } catch (ex){
       btn.disabled = false; $('genBusy').classList.remove('on');

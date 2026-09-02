@@ -2240,7 +2240,9 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     }
 
     sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey, {
-      auth: { persistSession: true, autoRefreshToken: true }
+      // detectSessionInUrl lets the OAuth (Google) redirect back to /app hand its
+      // session to the client from the URL. persistSession keeps it across reloads.
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
     });
 
     var sess = await sb.auth.getSession();

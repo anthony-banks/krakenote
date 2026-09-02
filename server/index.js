@@ -165,15 +165,19 @@ app.get('/api/config', (_req, res) => {
 });
 
 // POST /api/auth/signup { email, password }
-// Open registration into the free tier. Runs server-side (not via the browser's
-// anon key) so the free-tier profile row is seeded atomically with the account.
-// Email ownership is NOT yet verified (email_confirm: true) — a pre-launch item.
+// Open registration into the free tier, WITH email verification. Uses the normal
+// signUp flow (via the anon key) so Supabase sends a confirmation email and the
+// user has no session until they click the link — this is what closes the
+// "claim an email you don't own" hole. The free-tier profile row is seeded by a
+// DB trigger on auth.users (works for this path AND Google OAuth). The web app
+// calls supabase.auth.signUp() directly; this endpoint is kept for the mobile
+// client and is deliberately NOT a confirm-bypass.
 app.post('/api/auth/signup', async (req, res) => {
   const ip = clientIp(req);
   if (rateLimited('signup:' + ip)) {
     return res.status(429).json({ ok: false, error: 'Too many attempts. Try again in a minute.' });
   }
-  if (!supabase) {
+  if (!supabase || !SUPABASE_ANON_KEY) {
     return res.status(503).json({ ok: false, error: 'Accounts are not configured yet.' });
   }
 
@@ -186,32 +190,22 @@ app.post('/api/auth/signup', async (req, res) => {
     return res.status(400).json({ ok: false, error: 'Password must be at least 8 characters.' });
   }
 
-  // Open signup: anyone can register into the FREE tier (manual study loop, no
-  // AI, no Claude cost). email_confirm: true skips the SMTP round-trip — real
-  // email verification is a pre-launch hardening item. AI access is gated
-  // separately by plan (admin approval → 'pro').
-  const { data: created, error: createErr } = await supabase.auth.admin.createUser({
-    email,
-    password,
-    email_confirm: true,
-  });
+  // Anon client → real signUp, which sends the verification email and (with
+  // "Confirm email" on) returns no session until the address is confirmed.
+  const anon = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: false } });
+  const { data, error: signErr } = await anon.auth.signUp({ email, password });
 
-  if (createErr) {
-    const msg = (createErr.message || '').toLowerCase();
+  if (signErr) {
+    const msg = (signErr.message || '').toLowerCase();
     if (msg.includes('already') || msg.includes('registered') || msg.includes('exists')) {
       return res.status(409).json({ ok: false, error: 'An account already exists for that email. Try signing in.' });
     }
-    console.error('[signup] createUser failed:', createErr.message);
+    console.error('[signup] signUp failed:', signErr.message);
     return res.status(500).json({ ok: false, error: 'Could not create your account. Please try again.' });
   }
 
-  // Seed a free-tier profile row.
-  if (created?.user?.id) {
-    await supabase.from('profiles').upsert({ id: created.user.id, plan: 'free' }, { onConflict: 'id' })
-      .then(({ error: e }) => { if (e) console.error('[signup] profile seed failed:', e.message); });
-  }
-
-  return res.json({ ok: true });
+  // needsConfirmation is true when no session came back (verification pending).
+  return res.json({ ok: true, needsConfirmation: !data?.session });
 });
 
 // Serve the app shell. Auth state lives in the browser, so this page is public;

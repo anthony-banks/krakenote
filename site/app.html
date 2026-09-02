@@ -780,6 +780,21 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   var $ = function(id){ return document.getElementById(id); };
   var sb = null;          // supabase client, once configured
   var mode = 'signin';    // 'signin' | 'signup'
+  var lastAuthEmail = ''; // for resending the confirmation email
+
+  // Resend the email-confirmation link (wired into the "not confirmed" message).
+  async function resendConfirmation(){
+    if (!sb || !lastAuthEmail) return;
+    setMsg(null, '');
+    try {
+      var r = await sb.auth.resend({ type: 'signup', email: lastAuthEmail, options: { emailRedirectTo: window.location.origin + '/app' } });
+      setMsg(r.error ? 'err' : 'ok', r.error ? (r.error.message || 'Could not resend.') : 'Confirmation email resent — check your inbox.');
+    } catch (ex){ setMsg('err', 'Could not resend right now.'); }
+  }
+  function wireResendLink(){
+    var a = $('resendLink');
+    if (a) a.addEventListener('click', function(e){ e.preventDefault(); resendConfirmation(); });
+  }
 
   // ── Theme ──
   $('themeToggle').addEventListener('click', function(){
@@ -2184,32 +2199,41 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     btn.disabled = true;
     setMsg(null, '');
 
+    lastAuthEmail = email;
     try {
       if (mode === 'signup'){
-        // Server-side because the waitlist gate must not be skippable.
-        var res = await fetch('/api/auth/signup', {
-          method:'POST', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ email: email, password: pw })
-        });
-        var data = await res.json().catch(function(){ return {}; });
-        if (!res.ok || !data.ok){
-          if (data.error === 'not_on_waitlist'){
-            setMsg('err', 'That email is not on the waitlist yet. <a href="/#waitlist">Join the waitlist</a> and we will open your account.');
-          } else {
-            setMsg('err', data.error || 'Could not create your account.');
-          }
+        // Client-side signUp so Supabase sends the verification email. The user
+        // isn't signed in until they click the link (when "Confirm email" is on).
+        var su = await sb.auth.signUp({ email: email, password: pw, options: { emailRedirectTo: window.location.origin + '/app' } });
+        if (su.error){
+          setMsg('err', /already|registered|exists/i.test(su.error.message || '')
+            ? 'An account already exists for that email. Try signing in.'
+            : (su.error.message || 'Could not create your account.'));
           btn.disabled = false;
           return;
         }
-        // Account exists now — sign straight in so there is no second step.
+        $('pw').value = '';
+        btn.disabled = false;
+        if (su.data && su.data.session){
+          // "Confirm email" is off — signed in immediately.
+          onSignedIn(su.data.session);
+        } else {
+          // Verification required — email sent, no session yet.
+          setMsg('ok', 'Check your email — we sent a confirmation link to <b>' + escapeHtml(email) + '</b>. Click it to activate your account, then sign in.');
+          setMode('signin');
+        }
+        return;
       }
 
       var out = await sb.auth.signInWithPassword({ email: email, password: pw });
       if (out.error || !out.data || !out.data.session){
-        setMsg('err', mode === 'signup'
-          ? 'Your account was created, but sign-in failed. Try signing in.'
-          : 'Invalid email or password.');
-        if (mode === 'signup') setMode('signin');
+        var m = (out.error && out.error.message || '').toLowerCase();
+        if (m.includes('not confirmed') || m.includes('confirm')){
+          setMsg('err', 'Please confirm your email first — check your inbox. <a href="#" id="resendLink">Resend confirmation</a>');
+          wireResendLink();
+        } else {
+          setMsg('err', 'Invalid email or password.');
+        }
         btn.disabled = false;
         return;
       }

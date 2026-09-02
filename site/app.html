@@ -370,7 +370,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       <button type="button" id="switchBtn">Create an account</button>
     </div>
     <p class="fineprint" id="fineprint">
-      Accounts are limited to people on the waitlist while we're in early access.
+      Sign in to your Krakenote account.
     </p>
   </div>
 </section>
@@ -819,7 +819,9 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     var m = $('authMsg');
     m.className = 'msg' + (kind ? ' ' + kind : '');
     m.innerHTML = html || '';
-    if (!kind) m.style.display = 'none';
+    // Show whenever there's a message; hide only when clearing. (Without this a
+    // prior clear left display:none set, hiding later messages e.g. "check email".)
+    m.style.display = kind ? '' : 'none';
   }
 
   function setMode(next){
@@ -827,15 +829,15 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     var signup = mode === 'signup';
     $('authTitle').textContent = signup ? 'Create your account' : 'Welcome back';
     $('authSub').textContent = signup
-      ? 'Early access is open to people on the waitlist.'
+      ? 'Create a free account to start taking notes and studying.'
       : 'Sign in to your Krakenote account.';
     $('authBtn').textContent = signup ? 'Create account' : 'Sign in';
     $('switchText').textContent = signup ? 'Already have an account?' : 'New here?';
     $('switchBtn').textContent = signup ? 'Sign in' : 'Create an account';
     $('pw').setAttribute('autocomplete', signup ? 'new-password' : 'current-password');
     $('fineprint').textContent = signup
-      ? 'You will need to be on the waitlist to register.'
-      : 'Accounts are limited to people on the waitlist while we are in early access.';
+      ? "It's free to start — we'll email you a link to confirm your account."
+      : 'Welcome back to Krakenote.';
     setMsg(null, '');
   }
 

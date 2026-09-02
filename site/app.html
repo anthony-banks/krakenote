@@ -763,6 +763,20 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     </div>
   </div>
 
+  <!-- Post-signup "check your email" confirmation -->
+  <div class="modal-overlay hidden" id="emailSentModal">
+    <div class="modal-box" style="text-align:center">
+      <div style="font-size:42px;line-height:1;margin-bottom:8px">📧</div>
+      <div class="modal-title">Check your email</div>
+      <div class="modal-body">We sent a confirmation link to <b id="emailSentAddr"></b>. Click it to activate your account, then come back and sign in.</div>
+      <div class="modal-body" id="emailSentMsg" style="font-size:13px;min-height:16px"></div>
+      <div class="modal-actions" style="justify-content:center">
+        <button class="linkbtn" id="emailSentResend" type="button">Resend email</button>
+        <button class="btn btn-primary" id="emailSentOk" type="button">Got it</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Upgrade / request-access modal (free tier) -->
   <div class="modal-overlay hidden" id="upgradeModal">
     <div class="modal-box">
@@ -794,6 +808,13 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   function wireResendLink(){
     var a = $('resendLink');
     if (a) a.addEventListener('click', function(e){ e.preventDefault(); resendConfirmation(); });
+  }
+
+  // Post-signup confirmation modal ("check your email").
+  function showEmailSent(email){
+    $('emailSentAddr').textContent = email;
+    $('emailSentMsg').textContent = '';
+    $('emailSentModal').classList.remove('hidden');
   }
 
   // ── Theme ──
@@ -2163,6 +2184,15 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   $('promptCancel').addEventListener('click', hidePrompt);
   $('promptOk').addEventListener('click', submitPrompt);
   $('promptInput').addEventListener('keydown', function(e){ if (e.key === 'Enter') submitPrompt(); else if (e.key === 'Escape') hidePrompt(); });
+  $('emailSentOk').addEventListener('click', function(){ $('emailSentModal').classList.add('hidden'); });
+  $('emailSentResend').addEventListener('click', async function(){
+    if (!sb || !lastAuthEmail) return;
+    $('emailSentMsg').textContent = 'Resending…';
+    try {
+      var r = await sb.auth.resend({ type: 'signup', email: lastAuthEmail, options: { emailRedirectTo: window.location.origin + '/app' } });
+      $('emailSentMsg').textContent = r.error ? (r.error.message || 'Could not resend.') : 'Sent again — check your inbox.';
+    } catch (ex){ $('emailSentMsg').textContent = 'Could not resend right now.'; }
+  });
   // Review deck filter + study-again
   $('reviewDeckSel').addEventListener('change', loadReviewLauncher);
   $('studyAgainBtn').addEventListener('click', studyAgain);
@@ -2220,9 +2250,11 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
           // "Confirm email" is off — signed in immediately.
           onSignedIn(su.data.session);
         } else {
-          // Verification required — email sent, no session yet.
-          setMsg('ok', 'Check your email — we sent a confirmation link to <b>' + escapeHtml(email) + '</b>. Click it to activate your account, then sign in.');
+          // Verification required — email sent, no session yet. Switch the form
+          // to sign-in behind a clear confirmation modal (setMode clears the
+          // inline message, so we use the modal instead).
           setMode('signin');
+          showEmailSent(email);
         }
         return;
       }

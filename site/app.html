@@ -763,20 +763,6 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     </div>
   </div>
 
-  <!-- Post-signup "check your email" confirmation -->
-  <div class="modal-overlay hidden" id="emailSentModal">
-    <div class="modal-box" style="text-align:center">
-      <div style="font-size:42px;line-height:1;margin-bottom:8px">📧</div>
-      <div class="modal-title">Check your email</div>
-      <div class="modal-body">We sent a confirmation link to <b id="emailSentAddr"></b>. Click it to activate your account, then come back and sign in.</div>
-      <div class="modal-body" id="emailSentMsg" style="font-size:13px;min-height:16px"></div>
-      <div class="modal-actions" style="justify-content:center">
-        <button class="linkbtn" id="emailSentResend" type="button">Resend email</button>
-        <button class="btn btn-primary" id="emailSentOk" type="button">Got it</button>
-      </div>
-    </div>
-  </div>
-
   <!-- Upgrade / request-access modal (free tier) -->
   <div class="modal-overlay hidden" id="upgradeModal">
     <div class="modal-box">
@@ -784,6 +770,21 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       <div class="modal-body" id="upgradeBody"></div>
       <div id="upgradeMsg" style="font-size:13px;color:var(--accent);min-height:18px"></div>
       <div class="modal-actions"><button class="linkbtn" id="upgradeClose" type="button">Close</button><button class="btn btn-primary" id="upgradeReqBtn" type="button">Request access</button></div>
+    </div>
+  </div>
+</div>
+
+<!-- Post-signup "check your email" confirmation. Top-level (NOT inside #appView,
+     which is display:none on the auth screen) so it renders during signup. -->
+<div class="modal-overlay hidden" id="emailSentModal">
+  <div class="modal-box" style="text-align:center">
+    <div style="font-size:42px;line-height:1;margin-bottom:8px">📧</div>
+    <div class="modal-title">Check your email</div>
+    <div class="modal-body">We sent a confirmation link to <b id="emailSentAddr"></b>. Click it to activate your account, then come back and sign in.</div>
+    <div class="modal-body" id="emailSentMsg" style="font-size:13px;min-height:16px"></div>
+    <div class="modal-actions" style="justify-content:center">
+      <button class="linkbtn" id="emailSentResend" type="button">Resend email</button>
+      <button class="btn btn-primary" id="emailSentOk" type="button">Got it</button>
     </div>
   </div>
 </div>

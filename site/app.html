@@ -428,8 +428,11 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
 
     <!-- NOTES: notebooks + notes + editor (Evernote-like) -->
     <style>
+      /* Notes panel is transparent so the two cards float on the app background,
+         giving a greyish divider gap between the notebook nav and the editor. */
+      #notesPanel{background:transparent;border:0;border-radius:0;overflow:visible}
       .nt-wrap{display:flex;gap:16px;min-height:70vh}
-      .nt-side{width:290px;flex:none;display:flex;flex-direction:column;gap:12px}
+      .nt-side{width:290px;flex:none;display:flex;flex-direction:column;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:16px 14px}
       .nt-nbhead{display:flex;align-items:center;justify-content:space-between;font-family:var(--head);font-weight:700;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
       .nt-nbadd{background:none;border:0;color:var(--accent);font-size:20px;cursor:pointer;line-height:1;padding:0 4px}
       .nt-nbs{display:flex;flex-direction:column;gap:2px}
@@ -442,7 +445,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       .nt-nb:hover .nbx{opacity:.7}
       .nt-newnote{margin-top:4px}
       .nt-notes{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:6px;max-height:60vh}
-      .nt-item{text-align:left;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:11px 13px;cursor:pointer}
+      .nt-item{text-align:left;background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:11px 13px;cursor:pointer}
       .nt-item:hover{border-color:var(--accent)}
       .nt-item.active{border-color:var(--accent);background:var(--surface-2)}
       .nt-item .t{font-family:var(--head);font-weight:600;font-size:14.5px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

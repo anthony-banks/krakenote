@@ -1030,6 +1030,150 @@ app.post('/api/decks/:id/cards/reorder', requireUser, async (req, res) => {
   return res.json({ ok: true });
 });
 
+// ── Notes (Evernote-like: notebooks + notes) ────────────────────────────────
+// RLS-scoped to the owner (like decks/cards). Free to use — no AI, no plan gate.
+// Body is plain text / light markdown; the client renders it.
+const NOTE_TITLE_MAX = 200;
+const NOTE_BODY_MAX = 100_000;
+const NB_NAME_MAX = 80;
+
+// List the caller's notebooks (newest first) with a note count each.
+app.get('/api/notebooks', requireUser, async (req, res) => {
+  const { data, error } = await req.db
+    .from('notebooks')
+    .select('id, name, created_at, notes(count)')
+    .order('created_at', { ascending: false });
+  if (error) {
+    console.error('[notebooks] list failed:', error.message);
+    return res.status(500).json({ ok: false, error: 'Could not load notebooks.', detail: error.message });
+  }
+  const notebooks = (data || []).map((n) => ({
+    id: n.id, name: n.name, created_at: n.created_at,
+    noteCount: Array.isArray(n.notes) && n.notes[0] ? n.notes[0].count : 0,
+  }));
+  return res.json({ ok: true, notebooks });
+});
+
+app.post('/api/notebooks', requireUser, async (req, res) => {
+  const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+  if (!name) return res.status(400).json({ ok: false, error: 'A notebook name is required.' });
+  const { data, error } = await req.db
+    .from('notebooks')
+    .insert({ user_id: req.user.id, name: name.slice(0, NB_NAME_MAX) })
+    .select('id, name, created_at')
+    .single();
+  if (error) {
+    console.error('[notebooks] create failed:', error.message);
+    return res.status(500).json({ ok: false, error: 'Could not create the notebook.' });
+  }
+  return res.json({ ok: true, notebook: { ...data, noteCount: 0 } });
+});
+
+app.patch('/api/notebooks/:id', requireUser, async (req, res) => {
+  const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+  if (!name) return res.status(400).json({ ok: false, error: 'A notebook name is required.' });
+  const { error } = await req.db.from('notebooks').update({ name: name.slice(0, NB_NAME_MAX) }).eq('id', req.params.id);
+  if (error) {
+    console.error('[notebooks] rename failed:', error.message);
+    return res.status(500).json({ ok: false, error: 'Could not rename the notebook.' });
+  }
+  return res.json({ ok: true });
+});
+
+// Delete a notebook. Its notes are kept (notebook_id -> null via FK) so nothing is lost.
+app.delete('/api/notebooks/:id', requireUser, async (req, res) => {
+  const { error } = await req.db.from('notebooks').delete().eq('id', req.params.id);
+  if (error) {
+    console.error('[notebooks] delete failed:', error.message);
+    return res.status(500).json({ ok: false, error: 'Could not delete the notebook.' });
+  }
+  return res.json({ ok: true });
+});
+
+// List notes, newest-edited first. ?notebookId=<id> filters to one notebook;
+// ?notebookId=none returns unfiled notes. Returns metadata + a short snippet.
+app.get('/api/notes', requireUser, async (req, res) => {
+  let q = req.db
+    .from('notes')
+    .select('id, notebook_id, title, body, updated_at')
+    .order('updated_at', { ascending: false })
+    .limit(500);
+  const nb = req.query.notebookId;
+  if (nb === 'none') q = q.is('notebook_id', null);
+  else if (typeof nb === 'string' && nb) q = q.eq('notebook_id', nb);
+  const { data, error } = await q;
+  if (error) {
+    console.error('[notes] list failed:', error.message);
+    return res.status(500).json({ ok: false, error: 'Could not load notes.', detail: error.message });
+  }
+  const notes = (data || []).map((n) => ({
+    id: n.id,
+    notebook_id: n.notebook_id,
+    title: n.title || '',
+    snippet: (n.body || '').replace(/\s+/g, ' ').trim().slice(0, 140),
+    updated_at: n.updated_at,
+  }));
+  return res.json({ ok: true, notes });
+});
+
+// Create a note (blank is fine — the editor saves as you type).
+app.post('/api/notes', requireUser, async (req, res) => {
+  const title = typeof req.body?.title === 'string' ? req.body.title.slice(0, NOTE_TITLE_MAX) : '';
+  const body = typeof req.body?.body === 'string' ? req.body.body.slice(0, NOTE_BODY_MAX) : '';
+  const notebookId = typeof req.body?.notebookId === 'string' && req.body.notebookId ? req.body.notebookId : null;
+  const { data, error } = await req.db
+    .from('notes')
+    .insert({ user_id: req.user.id, notebook_id: notebookId, title, body })
+    .select('id, notebook_id, title, body, created_at, updated_at')
+    .single();
+  if (error) {
+    console.error('[notes] create failed:', error.message);
+    return res.status(500).json({ ok: false, error: 'Could not create the note.' });
+  }
+  return res.json({ ok: true, note: data });
+});
+
+// Full single note (for the editor).
+app.get('/api/notes/:id', requireUser, async (req, res) => {
+  const { data, error } = await req.db
+    .from('notes')
+    .select('id, notebook_id, title, body, created_at, updated_at')
+    .eq('id', req.params.id)
+    .maybeSingle();
+  if (error) {
+    console.error('[notes] get failed:', error.message);
+    return res.status(500).json({ ok: false, error: 'Could not load the note.' });
+  }
+  if (!data) return res.status(404).json({ ok: false, error: 'Note not found.' });
+  return res.json({ ok: true, note: data });
+});
+
+// Update a note (autosave). Any of title/body/notebookId; touches updated_at so it
+// sorts to the top. notebookId can be null to unfile.
+app.patch('/api/notes/:id', requireUser, async (req, res) => {
+  const patch = { updated_at: new Date().toISOString() };
+  if (typeof req.body?.title === 'string') patch.title = req.body.title.slice(0, NOTE_TITLE_MAX);
+  if (typeof req.body?.body === 'string') patch.body = req.body.body.slice(0, NOTE_BODY_MAX);
+  if ('notebookId' in (req.body || {})) {
+    patch.notebook_id = typeof req.body.notebookId === 'string' && req.body.notebookId ? req.body.notebookId : null;
+  }
+  const { error } = await req.db.from('notes').update(patch).eq('id', req.params.id);
+  if (error) {
+    console.error('[notes] update failed:', error.message);
+    return res.status(500).json({ ok: false, error: 'Could not save the note.' });
+  }
+  return res.json({ ok: true, updated_at: patch.updated_at });
+});
+
+app.delete('/api/notes/:id', requireUser, async (req, res) => {
+  const { error } = await req.db.from('notes').delete().eq('id', req.params.id);
+  if (error) {
+    console.error('[notes] delete failed:', error.message);
+    return res.status(500).json({ ok: false, error: 'Could not delete the note.' });
+  }
+  return res.json({ ok: true });
+});
+
 // ── Admin dashboard (Supabase Auth, superuser-gated, READ-ONLY) ─────────────
 // Login is proxied through the server so Supabase keys never touch the browser.
 // Only emails in SUPERUSER_EMAILS may sign in or read admin data. Every DB call

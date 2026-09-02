@@ -448,13 +448,13 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       .nt-item .t{font-family:var(--head);font-weight:600;font-size:14.5px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
       .nt-item .s{font-size:12.5px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
       .nt-item .d{font-size:11px;color:var(--muted);margin-top:4px}
-      .nt-main{flex:1;display:flex;flex-direction:column;gap:10px;min-width:0}
-      .nt-title{font-family:var(--head);font-weight:700;font-size:22px;color:var(--text);background:none;border:0;outline:none;width:100%}
-      .nt-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+      .nt-main{flex:1;display:flex;flex-direction:column;gap:12px;min-width:0;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:22px 24px}
+      .nt-title{font-family:var(--head);font-weight:700;font-size:24px;color:var(--text);background:none;border:0;outline:none;width:100%;padding:2px 0}
+      .nt-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding-bottom:12px;border-bottom:1px solid var(--border)}
       .nt-tools select{font-family:var(--body);font-size:13px;padding:6px 10px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text)}
       .nt-save{font-size:12px;color:var(--muted);margin-left:auto}
-      .nt-body{flex:1;min-height:340px;resize:vertical;font-family:var(--body);font-size:15px;line-height:1.7;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;outline:none}
-      .nt-preview{flex:1;min-height:340px;overflow-y:auto;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;color:var(--text);line-height:1.7}
+      .nt-body{flex:1;min-height:320px;resize:vertical;font-family:var(--body);font-size:15px;line-height:1.7;color:var(--text);background:transparent;border:0;padding:2px 0;outline:none}
+      .nt-preview{flex:1;min-height:320px;overflow-y:auto;background:transparent;border:0;padding:2px 0;color:var(--text);line-height:1.7}
       .nt-preview h1,.nt-preview h2,.nt-preview h3{font-family:var(--head);margin:.6em 0 .3em}
       .nt-preview ul{padding-left:1.3em}.nt-preview code{background:var(--surface-2);padding:1px 5px;border-radius:5px;font-size:.9em}
       .nt-preview pre{background:var(--surface-2);padding:12px;border-radius:10px;overflow-x:auto}
@@ -751,6 +751,15 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     </div>
   </div>
 
+  <!-- Text-input modal (replaces window.prompt) -->
+  <div class="modal-overlay hidden" id="promptModal">
+    <div class="modal-box">
+      <div class="modal-title" id="promptTitle">Name</div>
+      <input id="promptInput" type="text" style="margin:8px 0 4px" />
+      <div class="modal-actions"><button class="linkbtn" id="promptCancel" type="button">Cancel</button><button class="btn btn-primary" id="promptOk" type="button">Save</button></div>
+    </div>
+  </div>
+
   <!-- Upgrade / request-access modal (free tier) -->
   <div class="modal-overlay hidden" id="upgradeModal">
     <div class="modal-box">
@@ -1009,6 +1018,26 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     $('confirmModal').classList.remove('hidden');
   }
   function hideConfirm(){ $('confirmModal').classList.add('hidden'); _confirmCb = null; }
+
+  // Text-input modal (replaces window.prompt). onOk receives the trimmed value.
+  var _promptCb = null;
+  function showPrompt(title, opts, onOk){
+    opts = opts || {};
+    $('promptTitle').textContent = title;
+    var inp = $('promptInput');
+    inp.value = opts.value || '';
+    inp.placeholder = opts.placeholder || '';
+    $('promptOk').textContent = opts.okLabel || 'Save';
+    _promptCb = onOk;
+    $('promptModal').classList.remove('hidden');
+    setTimeout(function(){ inp.focus(); inp.select(); }, 30);
+  }
+  function hidePrompt(){ $('promptModal').classList.add('hidden'); _promptCb = null; }
+  function submitPrompt(){
+    var v = ($('promptInput').value || '').trim();
+    var cb = _promptCb; hidePrompt();
+    if (cb) cb(v);
+  }
 
   function escapeHtml(s){
     return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
@@ -1879,11 +1908,12 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     });
   }
 
-  async function addNotebook(){
-    var name = (window.prompt('Notebook name') || '').trim();
-    if (!name) return;
-    var out = await api('/api/notebooks', { method:'POST', body: JSON.stringify({ name: name }) });
-    if (out.res.ok && out.data.ok){ ntNotebooks.unshift(out.data.notebook); ntFilter = out.data.notebook.id; renderNotebooks(); loadNoteList(); }
+  function addNotebook(){
+    showPrompt('New notebook', { placeholder: 'Notebook name', okLabel: 'Create' }, async function(name){
+      if (!name) return;
+      var out = await api('/api/notebooks', { method:'POST', body: JSON.stringify({ name: name }) });
+      if (out.res.ok && out.data.ok){ ntNotebooks.unshift(out.data.notebook); ntFilter = out.data.notebook.id; renderNotebooks(); loadNoteList(); }
+    });
   }
 
   function deleteNotebook(id, name){
@@ -2110,6 +2140,9 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   // Confirm modal
   $('confirmCancel').addEventListener('click', hideConfirm);
   $('confirmOk').addEventListener('click', function(){ var cb = _confirmCb; hideConfirm(); if (cb) cb(); });
+  $('promptCancel').addEventListener('click', hidePrompt);
+  $('promptOk').addEventListener('click', submitPrompt);
+  $('promptInput').addEventListener('keydown', function(e){ if (e.key === 'Enter') submitPrompt(); else if (e.key === 'Escape') hidePrompt(); });
   // Review deck filter + study-again
   $('reviewDeckSel').addEventListener('change', loadReviewLauncher);
   $('studyAgainBtn').addEventListener('click', studyAgain);

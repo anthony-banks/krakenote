@@ -380,6 +380,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   <aside id="sidebar">
     <button class="nav-collapse" id="navCollapse" type="button" aria-label="Collapse sidebar"><span id="navChevron">‹</span></button>
     <button class="navlink active" data-view="home"><i class="ic" style="--i:url(/icons/anchor.svg)"></i><span class="nav-label">Home</span></button>
+    <button class="navlink" data-view="notes"><i class="ic" style="--i:url(/icons/paper.svg)"></i><span class="nav-label">Notes</span></button>
     <button class="navlink" data-view="decks"><i class="ic" style="--i:url(/icons/list.svg)"></i><span class="nav-label">Decks</span></button>
     <button class="navlink" data-view="review"><i class="ic" style="--i:url(/icons/wave.svg)"></i><span class="nav-label">Review</span></button>
     <button class="navlink" data-view="quizzes"><i class="ic" style="--i:url(/icons/question.svg)"></i><span class="nav-label">Quizzes</span></button>
@@ -420,7 +421,68 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
         <button class="quick-btn" data-go="decks"><i class="ic" style="--i:url(/icons/upload.svg)"></i><span><b>Add material</b><small>Open a deck → paste, drop a file, or a link</small></span></button>
         <button class="quick-btn" data-go="review"><i class="ic" style="--i:url(/icons/restartTime.svg)"></i><span><b>Review due</b><small>Study what's scheduled today</small></span></button>
         <button class="quick-btn" data-go="decks"><i class="ic" style="--i:url(/icons/list.svg)"></i><span><b>Your decks</b><small>Browse and manage decks</small></span></button>
+        <button class="quick-btn" data-go="notes"><i class="ic" style="--i:url(/icons/paper.svg)"></i><span><b>New note</b><small>Jot something down</small></span></button>
         <button class="quick-btn" data-go="quizzes"><i class="ic" style="--i:url(/icons/question.svg)"></i><span><b>Take a quiz</b><small>Test yourself, get a score</small></span></button>
+      </div>
+    </div>
+
+    <!-- NOTES: notebooks + notes + editor (Evernote-like) -->
+    <style>
+      .nt-wrap{display:flex;gap:16px;min-height:70vh}
+      .nt-side{width:290px;flex:none;display:flex;flex-direction:column;gap:12px}
+      .nt-nbhead{display:flex;align-items:center;justify-content:space-between;font-family:var(--head);font-weight:700;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+      .nt-nbadd{background:none;border:0;color:var(--accent);font-size:20px;cursor:pointer;line-height:1;padding:0 4px}
+      .nt-nbs{display:flex;flex-direction:column;gap:2px}
+      .nt-nb{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:8px 10px;border-radius:10px;cursor:pointer;color:var(--text);font-size:14px}
+      .nt-nb:hover{background:var(--surface-2)}
+      .nt-nb.active{background:var(--cta);color:var(--cta-text)}
+      .nt-nb .cnt{font-size:12px;color:var(--muted)}
+      .nt-nb.active .cnt{color:rgba(255,255,255,.85)}
+      .nt-nb .nbx{opacity:0;border:0;background:none;color:inherit;cursor:pointer;font-size:13px}
+      .nt-nb:hover .nbx{opacity:.7}
+      .nt-newnote{margin-top:4px}
+      .nt-notes{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:6px;max-height:60vh}
+      .nt-item{text-align:left;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:11px 13px;cursor:pointer}
+      .nt-item:hover{border-color:var(--accent)}
+      .nt-item.active{border-color:var(--accent);background:var(--surface-2)}
+      .nt-item .t{font-family:var(--head);font-weight:600;font-size:14.5px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .nt-item .s{font-size:12.5px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .nt-item .d{font-size:11px;color:var(--muted);margin-top:4px}
+      .nt-main{flex:1;display:flex;flex-direction:column;gap:10px;min-width:0}
+      .nt-title{font-family:var(--head);font-weight:700;font-size:22px;color:var(--text);background:none;border:0;outline:none;width:100%}
+      .nt-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+      .nt-tools select{font-family:var(--body);font-size:13px;padding:6px 10px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text)}
+      .nt-save{font-size:12px;color:var(--muted);margin-left:auto}
+      .nt-body{flex:1;min-height:340px;resize:vertical;font-family:var(--body);font-size:15px;line-height:1.7;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;outline:none}
+      .nt-preview{flex:1;min-height:340px;overflow-y:auto;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;color:var(--text);line-height:1.7}
+      .nt-preview h1,.nt-preview h2,.nt-preview h3{font-family:var(--head);margin:.6em 0 .3em}
+      .nt-preview ul{padding-left:1.3em}.nt-preview code{background:var(--surface-2);padding:1px 5px;border-radius:5px;font-size:.9em}
+      .nt-preview pre{background:var(--surface-2);padding:12px;border-radius:10px;overflow-x:auto}
+      .nt-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--muted);text-align:center;gap:6px}
+      @media(max-width:760px){.nt-wrap{flex-direction:column}.nt-side{width:auto}.nt-notes{max-height:34vh}}
+    </style>
+    <div class="panel view-panel hidden" id="notesPanel">
+      <div class="nt-wrap">
+        <aside class="nt-side">
+          <div class="nt-nbhead"><span>Notebooks</span><button class="nt-nbadd" id="ntAddNb" title="New notebook">＋</button></div>
+          <div class="nt-nbs" id="ntNbList"></div>
+          <button class="btn btn-primary nt-newnote" id="ntNewNote">＋ New note</button>
+          <div class="nt-notes" id="ntNoteList"></div>
+        </aside>
+        <section class="nt-main" id="ntMain">
+          <div class="nt-empty" id="ntEmpty"><span style="font-size:34px">📝</span><h3 style="font-family:var(--head)">No note selected</h3><p>Pick a note, or create a new one.</p></div>
+          <div id="ntEditor" class="hidden" style="display:flex;flex-direction:column;gap:10px;flex:1;min-height:0">
+            <input class="nt-title" id="ntTitle" placeholder="Title" />
+            <div class="nt-tools">
+              <select id="ntMove" title="Notebook"></select>
+              <button class="linkbtn" id="ntPreview" type="button">Preview</button>
+              <button class="linkbtn" id="ntDelete" type="button">Delete</button>
+              <span class="nt-save" id="ntSave"></span>
+            </div>
+            <textarea class="nt-body" id="ntBody" placeholder="Start writing… Markdown supported (# heading, **bold**, - list, - [ ] todo)"></textarea>
+            <div class="nt-preview hidden" id="ntPreviewBox"></div>
+          </div>
+        </section>
       </div>
     </div>
 
@@ -758,6 +820,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   // deck/card data anywhere yet, so there is nothing to fetch or fake. ──
   var VIEWS = {
     home:     { title:'Home',     sub:'Your study overview.',                    icon:'paper',       panel:'Recent activity', emoji:'🐙', h:'Nothing here yet',        b:'Once you start capturing notes, your recent decks and reviews will show up here.' },
+    notes:    { title:'Notes',    sub:'Jot it down. Organize into notebooks.',   icon:'paper',       panel:'Notes',           emoji:'📝', h:'No notes yet',            b:'Create a note to get started — everything syncs across web and mobile.' },
     decks:    { title:'Decks',    sub:'Every deck you have created.',            icon:'list',        panel:'Your decks',      emoji:'📚', h:'No decks yet',            b:'Decks you create in the Krakenote iOS app will sync here automatically.' },
     review:   { title:'Review',   sub:'Spaced repetition, scheduled for you.',   icon:'restartTime', panel:'Due today',       emoji:'✅', h:'Nothing due',             b:'When you have cards, Krakenote surfaces each one right before you would forget it.' },
     quizzes:  { title:'Quizzes',  sub:'Test yourself and track scores.',         icon:'question',    panel:'Quiz history',    emoji:'📝', h:'No quizzes taken',        b:'Quiz attempts and scores will be listed here once you take your first one.' },
@@ -767,7 +830,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   };
 
   var VIEW_PANELS = {
-    home: 'homePanel', decks: 'decksPanel', review: 'reviewPanel',
+    home: 'homePanel', notes: 'notesPanel', decks: 'decksPanel', review: 'reviewPanel',
     quizzes: 'quizPanel', progress: 'progressPanel', upload: 'uploadPanel', account: 'accountPanel',
   };
   var currentView = 'home';
@@ -790,6 +853,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     $(VIEW_PANELS[key] || 'homePanel').classList.remove('hidden');
     setActiveNav(key);
     if (key === 'home') loadHome();
+    else if (key === 'notes') loadNotes();
     else if (key === 'decks') loadDecks();
     else if (key === 'review') loadReviewLauncher();
     else if (key === 'quizzes') loadQuizPicker();
@@ -1622,6 +1686,226 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     $('quizDone').classList.remove('hidden');
   }
   function closeQuiz(){ $('quizOverlay').classList.add('hidden'); }
+
+  // ── Notes (notebooks + notes, Evernote-like) ──
+  var ntNotebooks = [];      // [{id,name,noteCount}]
+  var ntNotes = [];          // current list [{id,notebook_id,title,snippet,updated_at}]
+  var ntFilter = 'all';      // 'all' | 'none' | notebookId
+  var ntCurrent = null;      // full loaded note {id,notebook_id,title,body,...}
+  var ntSaveTimer = null;
+  var ntPreviewOn = false;
+
+  function fmtNoteTime(iso){
+    if (!iso) return '';
+    var d = new Date(iso); if (isNaN(d.getTime())) return '';
+    var today = new Date();
+    if (d.toDateString() === today.toDateString()) return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  }
+
+  // Tiny, safe Markdown → HTML (escape first, then apply a small subset).
+  function ntMarkdown(src){
+    var lines = String(src || '').split('\n');
+    var html = '', inUl = false, inPre = false;
+    function inline(t){
+      t = escapeHtml(t)
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        .replace(/(^|[^*])\*([^*]+)\*/g, '$1<em>$2</em>')
+        .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+      return t;
+    }
+    for (var i = 0; i < lines.length; i++){
+      var ln = lines[i];
+      if (/^```/.test(ln)){ if (inPre){ html += '</pre>'; inPre = false; } else { if (inUl){ html += '</ul>'; inUl = false; } html += '<pre>'; inPre = true; } continue; }
+      if (inPre){ html += escapeHtml(ln) + '\n'; continue; }
+      var h = ln.match(/^(#{1,3})\s+(.*)$/);
+      if (h){ if (inUl){ html += '</ul>'; inUl = false; } html += '<h' + h[1].length + '>' + inline(h[2]) + '</h' + h[1].length + '>'; continue; }
+      var todo = ln.match(/^\s*-\s+\[( |x|X)\]\s+(.*)$/);
+      var li = ln.match(/^\s*[-*]\s+(.*)$/);
+      if (todo || li){
+        if (!inUl){ html += '<ul>'; inUl = true; }
+        if (todo){ html += '<li>' + (todo[1].toLowerCase() === 'x' ? '☑' : '☐') + ' ' + inline(todo[2]) + '</li>'; }
+        else { html += '<li>' + inline(li[1]) + '</li>'; }
+        continue;
+      }
+      if (inUl){ html += '</ul>'; inUl = false; }
+      if (ln.trim() === '') html += '<br>';
+      else html += '<p>' + inline(ln) + '</p>';
+    }
+    if (inUl) html += '</ul>';
+    if (inPre) html += '</pre>';
+    return html;
+  }
+
+  async function loadNotes(){
+    var out = await api('/api/notebooks');
+    if (out.res.status === 401){ signOut(); return; }
+    ntNotebooks = (out.res.ok && out.data.ok) ? (out.data.notebooks || []) : [];
+    renderNotebooks();
+    await loadNoteList();
+    if (!ntCurrent) showNoteEditor(false);
+  }
+
+  function renderNotebooks(){
+    var wrap = $('ntNbList'); wrap.innerHTML = '';
+    var total = ntNotebooks.reduce(function(s, n){ return s + (n.noteCount || 0); }, 0);
+    function row(id, label, count, deletable){
+      var el = document.createElement('div'); el.className = 'nt-nb' + (ntFilter === id ? ' active' : '');
+      var name = document.createElement('span'); name.textContent = label; name.style.overflow = 'hidden'; name.style.textOverflow = 'ellipsis'; name.style.whiteSpace = 'nowrap';
+      el.appendChild(name);
+      var right = document.createElement('span'); right.style.display = 'flex'; right.style.alignItems = 'center'; right.style.gap = '6px';
+      if (count != null){ var c = document.createElement('span'); c.className = 'cnt'; c.textContent = count; right.appendChild(c); }
+      if (deletable){
+        var x = document.createElement('button'); x.className = 'nbx'; x.textContent = '✕'; x.title = 'Delete notebook';
+        x.addEventListener('click', function(e){ e.stopPropagation(); deleteNotebook(id, label); });
+        right.appendChild(x);
+      }
+      el.appendChild(right);
+      el.addEventListener('click', function(){ ntFilter = id; renderNotebooks(); loadNoteList(); });
+      wrap.appendChild(el);
+    }
+    row('all', 'All notes', total, false);
+    row('none', 'Unfiled', null, false);
+    ntNotebooks.forEach(function(nb){ row(nb.id, nb.name, nb.noteCount || 0, true); });
+    // Keep the editor's "move to" dropdown in sync.
+    var mv = $('ntMove');
+    if (mv){
+      mv.innerHTML = '';
+      var optNone = document.createElement('option'); optNone.value = ''; optNone.textContent = 'Unfiled'; mv.appendChild(optNone);
+      ntNotebooks.forEach(function(nb){ var o = document.createElement('option'); o.value = nb.id; o.textContent = nb.name; mv.appendChild(o); });
+      if (ntCurrent) mv.value = ntCurrent.notebook_id || '';
+    }
+  }
+
+  async function loadNoteList(){
+    var qs = ntFilter === 'all' ? '' : '?notebookId=' + encodeURIComponent(ntFilter);
+    var out = await api('/api/notes' + qs);
+    if (out.res.status === 401){ signOut(); return; }
+    ntNotes = (out.res.ok && out.data.ok) ? (out.data.notes || []) : [];
+    renderNoteList();
+  }
+
+  function renderNoteList(){
+    var wrap = $('ntNoteList'); wrap.innerHTML = '';
+    if (!ntNotes.length){
+      var e = document.createElement('div'); e.style.color = 'var(--muted)'; e.style.fontSize = '13px'; e.style.padding = '10px 4px';
+      e.textContent = 'No notes here yet.'; wrap.appendChild(e); return;
+    }
+    ntNotes.forEach(function(n){
+      var it = document.createElement('button'); it.className = 'nt-item' + (ntCurrent && ntCurrent.id === n.id ? ' active' : ''); it.type = 'button';
+      var t = document.createElement('div'); t.className = 't'; t.textContent = n.title || 'Untitled';
+      var s = document.createElement('div'); s.className = 's'; s.textContent = n.snippet || 'No additional text';
+      var d = document.createElement('div'); d.className = 'd'; d.textContent = fmtNoteTime(n.updated_at);
+      it.appendChild(t); it.appendChild(s); it.appendChild(d);
+      it.addEventListener('click', function(){ openNote(n.id); });
+      wrap.appendChild(it);
+    });
+  }
+
+  function showNoteEditor(show){
+    $('ntEditor').classList.toggle('hidden', !show);
+    $('ntEmpty').classList.toggle('hidden', show);
+  }
+
+  async function openNote(id){
+    var out = await api('/api/notes/' + encodeURIComponent(id));
+    if (out.res.status === 401){ signOut(); return; }
+    if (!out.res.ok || !out.data.ok){ return; }
+    ntCurrent = out.data.note;
+    $('ntTitle').value = ntCurrent.title || '';
+    $('ntBody').value = ntCurrent.body || '';
+    $('ntSave').textContent = 'Saved';
+    ntPreviewOn = false; applyPreview();
+    var mv = $('ntMove'); if (mv) mv.value = ntCurrent.notebook_id || '';
+    showNoteEditor(true);
+    renderNoteList();
+  }
+
+  async function createNote(){
+    var notebookId = (ntFilter !== 'all' && ntFilter !== 'none') ? ntFilter : '';
+    var out = await api('/api/notes', { method:'POST', body: JSON.stringify({ title:'', body:'', notebookId: notebookId }) });
+    if (out.res.status === 401){ signOut(); return; }
+    if (!out.res.ok || !out.data.ok){ return; }
+    ntCurrent = out.data.note;
+    $('ntTitle').value = ''; $('ntBody').value = ''; $('ntSave').textContent = 'Saved';
+    ntPreviewOn = false; applyPreview();
+    var mv = $('ntMove'); if (mv) mv.value = ntCurrent.notebook_id || '';
+    showNoteEditor(true);
+    await loadNoteList();
+    $('ntTitle').focus();
+    loadNotebooksCounts();
+  }
+
+  function scheduleNoteSave(){
+    if (!ntCurrent) return;
+    $('ntSave').textContent = 'Saving…';
+    if (ntSaveTimer) clearTimeout(ntSaveTimer);
+    ntSaveTimer = setTimeout(saveNoteNow, 700);
+  }
+
+  async function saveNoteNow(){
+    if (!ntCurrent) return;
+    var payload = { title: $('ntTitle').value, body: $('ntBody').value };
+    var out = await api('/api/notes/' + encodeURIComponent(ntCurrent.id), { method:'PATCH', body: JSON.stringify(payload) });
+    if (out.res.status === 401){ signOut(); return; }
+    if (out.res.ok && out.data.ok){
+      $('ntSave').textContent = 'Saved';
+      ntCurrent.title = payload.title; ntCurrent.body = payload.body; ntCurrent.updated_at = out.data.updated_at;
+      // Reflect the title/snippet/order change in the list without a full reload.
+      loadNoteList();
+    } else { $('ntSave').textContent = 'Save failed'; }
+  }
+
+  function applyPreview(){
+    $('ntPreview').textContent = ntPreviewOn ? 'Edit' : 'Preview';
+    $('ntBody').classList.toggle('hidden', ntPreviewOn);
+    $('ntPreviewBox').classList.toggle('hidden', !ntPreviewOn);
+    if (ntPreviewOn){ $('ntPreviewBox').innerHTML = ntMarkdown($('ntBody').value); mathify($('ntPreviewBox')); }
+  }
+
+  async function moveNote(){
+    if (!ntCurrent) return;
+    var nb = $('ntMove').value || null;
+    var out = await api('/api/notes/' + encodeURIComponent(ntCurrent.id), { method:'PATCH', body: JSON.stringify({ notebookId: nb }) });
+    if (out.res.ok && out.data.ok){ ntCurrent.notebook_id = nb; loadNotes(); }
+  }
+
+  function deleteNote(){
+    if (!ntCurrent) return;
+    showConfirm('Delete note?', 'This permanently deletes "' + (ntCurrent.title || 'Untitled') + '".', 'Delete', async function(){
+      var out = await api('/api/notes/' + encodeURIComponent(ntCurrent.id), { method:'DELETE' });
+      if (out.res.ok && out.data.ok){ ntCurrent = null; showNoteEditor(false); loadNotes(); }
+    });
+  }
+
+  async function addNotebook(){
+    var name = (window.prompt('Notebook name') || '').trim();
+    if (!name) return;
+    var out = await api('/api/notebooks', { method:'POST', body: JSON.stringify({ name: name }) });
+    if (out.res.ok && out.data.ok){ ntNotebooks.unshift(out.data.notebook); ntFilter = out.data.notebook.id; renderNotebooks(); loadNoteList(); }
+  }
+
+  function deleteNotebook(id, name){
+    showConfirm('Delete notebook?', 'Delete "' + name + '"? Its notes are kept and moved to Unfiled.', 'Delete', async function(){
+      var out = await api('/api/notebooks/' + encodeURIComponent(id), { method:'DELETE' });
+      if (out.res.ok && out.data.ok){ if (ntFilter === id) ntFilter = 'all'; loadNotes(); }
+    });
+  }
+
+  // Refresh just the notebook counts after adding/removing notes.
+  async function loadNotebooksCounts(){
+    var out = await api('/api/notebooks');
+    if (out.res.ok && out.data.ok){ ntNotebooks = out.data.notebooks || []; renderNotebooks(); }
+  }
+
+  $('ntNewNote').addEventListener('click', createNote);
+  $('ntAddNb').addEventListener('click', addNotebook);
+  $('ntTitle').addEventListener('input', scheduleNoteSave);
+  $('ntBody').addEventListener('input', scheduleNoteSave);
+  $('ntMove').addEventListener('change', moveNote);
+  $('ntDelete').addEventListener('click', deleteNote);
+  $('ntPreview').addEventListener('click', function(){ ntPreviewOn = !ntPreviewOn; applyPreview(); });
 
   // ── Progress ──
   async function loadProgress(){

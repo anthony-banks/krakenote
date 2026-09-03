@@ -456,7 +456,12 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       .nt-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding-bottom:12px;border-bottom:1px solid var(--border)}
       .nt-tools select{font-family:var(--body);font-size:13px;padding:6px 10px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text)}
       .nt-save{font-size:12px;color:var(--muted);margin-left:auto}
+      .nt-fmtbar{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+      .nt-fmtbar button{width:34px;height:32px;border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:9px;font-size:15px;font-family:var(--body);cursor:pointer;display:flex;align-items:center;justify-content:center}
+      .nt-fmtbar button:hover{border-color:var(--accent);color:var(--accent)}
+      .nt-fmtsep{width:1px;height:20px;background:var(--border);margin:0 4px}
       .nt-body{flex:1;min-height:320px;resize:vertical;font-family:var(--body);font-size:15px;line-height:1.7;color:var(--text);background:transparent;border:0;padding:2px 0;outline:none}
+      .nt-preview u{text-decoration:underline}
       .nt-preview{flex:1;min-height:320px;overflow-y:auto;background:transparent;border:0;padding:2px 0;color:var(--text);line-height:1.7}
       .nt-preview h1,.nt-preview h2,.nt-preview h3{font-family:var(--head);margin:.6em 0 .3em}
       .nt-preview ul{padding-left:1.3em}.nt-preview code{background:var(--surface-2);padding:1px 5px;border-radius:5px;font-size:.9em}
@@ -481,6 +486,16 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
               <button class="linkbtn" id="ntPreview" type="button">Preview</button>
               <button class="linkbtn" id="ntDelete" type="button">Delete</button>
               <span class="nt-save" id="ntSave"></span>
+            </div>
+            <div class="nt-fmtbar" id="ntFmtBar">
+              <button type="button" data-fmt="bold" title="Bold" style="font-weight:800">B</button>
+              <button type="button" data-fmt="italic" title="Italic" style="font-style:italic">I</button>
+              <button type="button" data-fmt="underline" title="Underline" style="text-decoration:underline">U</button>
+              <span class="nt-fmtsep"></span>
+              <button type="button" data-fmt="h1" title="Heading">H</button>
+              <button type="button" data-fmt="bullet" title="Bullet list">•</button>
+              <button type="button" data-fmt="subbullet" title="Sub-bullet">⁃</button>
+              <button type="button" data-fmt="todo" title="Checklist">☑</button>
             </div>
             <textarea class="nt-body" id="ntBody" placeholder="Start writing… Markdown supported (# heading, **bold**, - list, - [ ] todo)"></textarea>
             <div class="nt-preview hidden" id="ntPreviewBox"></div>
@@ -1781,6 +1796,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     function inline(t){
       t = escapeHtml(t)
         .replace(/`([^`]+)`/g, '<code>$1</code>')
+        .replace(/&lt;u&gt;([\s\S]*?)&lt;\/u&gt;/g, '<u>$1</u>')
         .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
         .replace(/(^|[^*])\*([^*]+)\*/g, '$1<em>$2</em>')
         .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
@@ -1978,6 +1994,37 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   $('ntMove').addEventListener('change', moveNote);
   $('ntDelete').addEventListener('click', deleteNote);
   $('ntPreview').addEventListener('click', function(){ ntPreviewOn = !ntPreviewOn; applyPreview(); });
+
+  // ── Note formatting toolbar (inserts markdown at the cursor/selection) ──
+  function ntWrap(before, after){
+    var ta = $('ntBody'); var v = ta.value;
+    var st = ta.selectionStart, en = ta.selectionEnd;
+    ta.value = v.slice(0, st) + before + v.slice(st, en) + after + v.slice(en);
+    ta.focus();
+    ta.selectionStart = st + before.length; ta.selectionEnd = en + before.length;
+    scheduleNoteSave();
+  }
+  function ntLinePrefix(prefix){
+    var ta = $('ntBody'); var v = ta.value; var st = ta.selectionStart;
+    var lineStart = v.lastIndexOf('\n', st - 1) + 1;
+    ta.value = v.slice(0, lineStart) + prefix + v.slice(lineStart);
+    ta.focus();
+    ta.selectionStart = ta.selectionEnd = st + prefix.length;
+    scheduleNoteSave();
+  }
+  var NT_FMT = {
+    bold: function(){ ntWrap('**', '**'); },
+    italic: function(){ ntWrap('*', '*'); },
+    underline: function(){ ntWrap('<u>', '</u>'); },
+    h1: function(){ ntLinePrefix('# '); },
+    bullet: function(){ ntLinePrefix('- '); },
+    subbullet: function(){ ntLinePrefix('    - '); },
+    todo: function(){ ntLinePrefix('- [ ] '); },
+  };
+  Array.prototype.forEach.call($('ntFmtBar').querySelectorAll('button[data-fmt]'), function(b){
+    b.addEventListener('mousedown', function(e){ e.preventDefault(); }); // keep textarea focus/selection
+    b.addEventListener('click', function(){ var fn = NT_FMT[b.getAttribute('data-fmt')]; if (fn) fn(); });
+  });
 
   // ── Progress ──
   async function loadProgress(){

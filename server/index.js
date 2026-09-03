@@ -1104,7 +1104,8 @@ app.get('/api/notes', requireUser, async (req, res) => {
     id: n.id,
     notebook_id: n.notebook_id,
     title: n.title || '',
-    snippet: (n.body || '').replace(/\s+/g, ' ').trim().slice(0, 140),
+    // Body may be HTML (rich editor) or plain/markdown — strip tags for the snippet.
+    snippet: (n.body || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 140),
     updated_at: n.updated_at,
   }));
   return res.json({ ok: true, notes });

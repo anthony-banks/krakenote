@@ -460,8 +460,14 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       .nt-fmtbar button{width:34px;height:32px;border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:9px;font-size:15px;font-family:var(--body);cursor:pointer;display:flex;align-items:center;justify-content:center}
       .nt-fmtbar button:hover{border-color:var(--accent);color:var(--accent)}
       .nt-fmtsep{width:1px;height:20px;background:var(--border);margin:0 4px}
-      .nt-body{flex:1;min-height:320px;resize:vertical;font-family:var(--body);font-size:15px;line-height:1.7;color:var(--text);background:transparent;border:0;padding:2px 0;outline:none}
-      .nt-preview u{text-decoration:underline}
+      .nt-body{flex:1;min-height:320px;overflow-y:auto;font-family:var(--body);font-size:15px;line-height:1.75;color:var(--text);background:transparent;border:0;padding:4px 2px;outline:none}
+      .nt-body:empty:before{content:attr(data-ph);color:var(--muted)}
+      .nt-body h1,.nt-body h2,.nt-body h3{font-family:var(--head);margin:.5em 0 .25em;line-height:1.3}
+      .nt-body h1{font-size:1.5em}.nt-body h2{font-size:1.3em}.nt-body h3{font-size:1.12em}
+      .nt-body ul,.nt-body ol{padding-left:1.5em;margin:.35em 0}
+      .nt-body li{margin:.15em 0}
+      .nt-body a{color:var(--accent)}
+      .nt-body u{text-decoration:underline}
       .nt-preview{flex:1;min-height:320px;overflow-y:auto;background:transparent;border:0;padding:2px 0;color:var(--text);line-height:1.7}
       .nt-preview h1,.nt-preview h2,.nt-preview h3{font-family:var(--head);margin:.6em 0 .3em}
       .nt-preview ul{padding-left:1.3em}.nt-preview code{background:var(--surface-2);padding:1px 5px;border-radius:5px;font-size:.9em}
@@ -483,7 +489,6 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
             <input class="nt-title" id="ntTitle" placeholder="Title" />
             <div class="nt-tools">
               <select id="ntMove" title="Notebook"></select>
-              <button class="linkbtn" id="ntPreview" type="button">Preview</button>
               <button class="linkbtn" id="ntDelete" type="button">Delete</button>
               <span class="nt-save" id="ntSave"></span>
             </div>
@@ -492,13 +497,14 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
               <button type="button" data-fmt="italic" title="Italic" style="font-style:italic">I</button>
               <button type="button" data-fmt="underline" title="Underline" style="text-decoration:underline">U</button>
               <span class="nt-fmtsep"></span>
-              <button type="button" data-fmt="h1" title="Heading">H</button>
+              <button type="button" data-fmt="heading" title="Heading">H</button>
               <button type="button" data-fmt="bullet" title="Bullet list">•</button>
-              <button type="button" data-fmt="subbullet" title="Sub-bullet">⁃</button>
-              <button type="button" data-fmt="todo" title="Checklist">☑</button>
+              <button type="button" data-fmt="number" title="Numbered list">1.</button>
+              <span class="nt-fmtsep"></span>
+              <button type="button" data-fmt="indent" title="Indent / sub-bullet">→</button>
+              <button type="button" data-fmt="outdent" title="Outdent">←</button>
             </div>
-            <textarea class="nt-body" id="ntBody" placeholder="Start writing… Markdown supported (# heading, **bold**, - list, - [ ] todo)"></textarea>
-            <div class="nt-preview hidden" id="ntPreviewBox"></div>
+            <div class="nt-body" id="ntBody" contenteditable="true" data-ph="Start writing…"></div>
           </div>
         </section>
       </div>
@@ -1779,7 +1785,6 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   var ntFilter = 'all';      // 'all' | 'none' | notebookId
   var ntCurrent = null;      // full loaded note {id,notebook_id,title,body,...}
   var ntSaveTimer = null;
-  var ntPreviewOn = false;
 
   function fmtNoteTime(iso){
     if (!iso) return '';
@@ -1901,9 +1906,8 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     if (!out.res.ok || !out.data.ok){ return; }
     ntCurrent = out.data.note;
     $('ntTitle').value = ntCurrent.title || '';
-    $('ntBody').value = ntCurrent.body || '';
+    $('ntBody').innerHTML = ntBodyToHtml(ntCurrent.body || '');
     $('ntSave').textContent = 'Saved';
-    ntPreviewOn = false; applyPreview();
     var mv = $('ntMove'); if (mv) mv.value = ntCurrent.notebook_id || '';
     showNoteEditor(true);
     renderNoteList();
@@ -1915,8 +1919,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     if (out.res.status === 401){ signOut(); return; }
     if (!out.res.ok || !out.data.ok){ return; }
     ntCurrent = out.data.note;
-    $('ntTitle').value = ''; $('ntBody').value = ''; $('ntSave').textContent = 'Saved';
-    ntPreviewOn = false; applyPreview();
+    $('ntTitle').value = ''; $('ntBody').innerHTML = ''; $('ntSave').textContent = 'Saved';
     var mv = $('ntMove'); if (mv) mv.value = ntCurrent.notebook_id || '';
     showNoteEditor(true);
     await loadNoteList();
@@ -1933,7 +1936,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
 
   async function saveNoteNow(){
     if (!ntCurrent) return;
-    var payload = { title: $('ntTitle').value, body: $('ntBody').value };
+    var payload = { title: $('ntTitle').value, body: ntSanitize($('ntBody').innerHTML) };
     var out = await api('/api/notes/' + encodeURIComponent(ntCurrent.id), { method:'PATCH', body: JSON.stringify(payload) });
     if (out.res.status === 401){ signOut(); return; }
     if (out.res.ok && out.data.ok){
@@ -1944,11 +1947,33 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     } else { $('ntSave').textContent = 'Save failed'; }
   }
 
-  function applyPreview(){
-    $('ntPreview').textContent = ntPreviewOn ? 'Edit' : 'Preview';
-    $('ntBody').classList.toggle('hidden', ntPreviewOn);
-    $('ntPreviewBox').classList.toggle('hidden', !ntPreviewOn);
-    if (ntPreviewOn){ $('ntPreviewBox').innerHTML = ntMarkdown($('ntBody').value); mathify($('ntPreviewBox')); }
+  // Editor stores HTML. Legacy notes were markdown/plain text — convert those to
+  // HTML on load so they render in the rich editor (and get saved as HTML next).
+  function ntBodyToHtml(stored){
+    if (!stored) return '';
+    if (/<(b|strong|i|em|u|ul|ol|li|h[1-3]|p|div|br|a|span)\b/i.test(stored)) return stored; // already HTML
+    return ntMarkdown(stored); // markdown/plain → HTML
+  }
+  // Keep only a safe subset of tags/attrs from the contenteditable output.
+  var NT_ALLOWED = { B:1, STRONG:1, I:1, EM:1, U:1, UL:1, OL:1, LI:1, H1:1, H2:1, H3:1, P:1, BR:1, DIV:1, A:1 };
+  function ntSanitize(html){
+    var root = document.createElement('div'); root.innerHTML = html || '';
+    (function walk(node){
+      Array.prototype.slice.call(node.childNodes).forEach(function(c){
+        if (c.nodeType === 1){
+          if (!NT_ALLOWED[c.tagName]){
+            while (c.firstChild) node.insertBefore(c.firstChild, c);
+            node.removeChild(c);
+            return;
+          }
+          Array.prototype.slice.call(c.attributes).forEach(function(a){
+            if (!(c.tagName === 'A' && a.name === 'href')) c.removeAttribute(a.name);
+          });
+          walk(c);
+        }
+      });
+    })(root);
+    return root.innerHTML;
   }
 
   async function moveNote(){
@@ -1993,37 +2018,26 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   $('ntBody').addEventListener('input', scheduleNoteSave);
   $('ntMove').addEventListener('change', moveNote);
   $('ntDelete').addEventListener('click', deleteNote);
-  $('ntPreview').addEventListener('click', function(){ ntPreviewOn = !ntPreviewOn; applyPreview(); });
 
-  // ── Note formatting toolbar (inserts markdown at the cursor/selection) ──
-  function ntWrap(before, after){
-    var ta = $('ntBody'); var v = ta.value;
-    var st = ta.selectionStart, en = ta.selectionEnd;
-    ta.value = v.slice(0, st) + before + v.slice(st, en) + after + v.slice(en);
-    ta.focus();
-    ta.selectionStart = st + before.length; ta.selectionEnd = en + before.length;
-    scheduleNoteSave();
-  }
-  function ntLinePrefix(prefix){
-    var ta = $('ntBody'); var v = ta.value; var st = ta.selectionStart;
-    var lineStart = v.lastIndexOf('\n', st - 1) + 1;
-    ta.value = v.slice(0, lineStart) + prefix + v.slice(lineStart);
-    ta.focus();
-    ta.selectionStart = ta.selectionEnd = st + prefix.length;
-    scheduleNoteSave();
-  }
+  // ── Note formatting toolbar (native rich text via execCommand) ──
+  try { document.execCommand('styleWithCSS', false, false); } catch (e){} // prefer <b>/<i>/<u> tags over styled spans
   var NT_FMT = {
-    bold: function(){ ntWrap('**', '**'); },
-    italic: function(){ ntWrap('*', '*'); },
-    underline: function(){ ntWrap('<u>', '</u>'); },
-    h1: function(){ ntLinePrefix('# '); },
-    bullet: function(){ ntLinePrefix('- '); },
-    subbullet: function(){ ntLinePrefix('    - '); },
-    todo: function(){ ntLinePrefix('- [ ] '); },
+    bold: function(){ document.execCommand('bold'); },
+    italic: function(){ document.execCommand('italic'); },
+    underline: function(){ document.execCommand('underline'); },
+    heading: function(){ document.execCommand('formatBlock', false, 'H2'); },
+    bullet: function(){ document.execCommand('insertUnorderedList'); },
+    number: function(){ document.execCommand('insertOrderedList'); },
+    indent: function(){ document.execCommand('indent'); },   // sub-bullet / nest
+    outdent: function(){ document.execCommand('outdent'); },
   };
   Array.prototype.forEach.call($('ntFmtBar').querySelectorAll('button[data-fmt]'), function(b){
-    b.addEventListener('mousedown', function(e){ e.preventDefault(); }); // keep textarea focus/selection
-    b.addEventListener('click', function(){ var fn = NT_FMT[b.getAttribute('data-fmt')]; if (fn) fn(); });
+    b.addEventListener('mousedown', function(e){ e.preventDefault(); }); // keep editor focus/selection
+    b.addEventListener('click', function(){
+      $('ntBody').focus();
+      var fn = NT_FMT[b.getAttribute('data-fmt')]; if (fn) fn();
+      scheduleNoteSave();
+    });
   });
 
   // ── Progress ──

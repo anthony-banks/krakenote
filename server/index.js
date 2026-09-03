@@ -48,6 +48,10 @@ const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const AI_MODEL = process.env.ANTHROPIC_MODEL || 'claude-opus-4-8';
 const anthropic = ANTHROPIC_API_KEY ? new Anthropic({ apiKey: ANTHROPIC_API_KEY }) : null;
 
+// Shared secret for the RevenueCat webhook (set as the Authorization header in
+// the RevenueCat dashboard). Server-side only.
+const REVENUECAT_WEBHOOK_SECRET = process.env.REVENUECAT_WEBHOOK_SECRET;
+
 const app = express();
 
 // Railway terminates TLS at its edge proxy and forwards X-Forwarded-For. Without
@@ -69,6 +73,7 @@ app.use(helmet({ contentSecurityPolicy: false }));
 // everything else stays tiny. The first matching parser wins — express.json
 // skips a body it has already parsed, so the 8kb global never re-runs here.
 app.use('/api/decks', express.json({ limit: '12mb' }));
+app.use('/api/rc', express.json({ limit: '64kb' })); // RevenueCat webhook payloads
 app.use(express.json({ limit: '8kb' }));
 
 // Basic in-memory rate limit: max `max` requests per key per minute. Keys are
@@ -1166,6 +1171,49 @@ app.delete('/api/notes/:id', requireUser, async (req, res) => {
     console.error('[notes] delete failed:', error.message);
     return res.status(500).json({ ok: false, error: 'Could not delete the note.' });
   }
+  return res.json({ ok: true });
+});
+
+// ── Billing: RevenueCat webhook ─────────────────────────────────────────────
+// RevenueCat is the entitlement source of truth across iOS (Apple IAP) and web
+// (Stripe). It POSTs subscription events here; we map them to profiles.plan.
+// Auth: RevenueCat sends the Authorization header we configure in its dashboard.
+// app_user_id is the Supabase user id (set client-side via Purchases.logIn).
+const RC_GRANT = new Set(['INITIAL_PURCHASE', 'RENEWAL', 'UNCANCELLATION', 'PRODUCT_CHANGE', 'NON_RENEWING_PURCHASE', 'SUBSCRIPTION_EXTENDED', 'TRANSFER']);
+const RC_REVOKE = new Set(['EXPIRATION']);
+// Note: CANCELLATION = auto-renew off but still active until EXPIRATION → no change.
+// BILLING_ISSUE → keep access (grace); mark status only.
+
+app.post('/api/rc/webhook', async (req, res) => {
+  if (!REVENUECAT_WEBHOOK_SECRET) return res.status(503).json({ ok: false });
+  const auth = (req.headers.authorization || '').toString();
+  if (auth !== 'Bearer ' + REVENUECAT_WEBHOOK_SECRET) {
+    return res.status(401).json({ ok: false });
+  }
+  if (!supabase) return res.status(503).json({ ok: false });
+
+  const ev = req.body && req.body.event;
+  const userId = ev && ev.app_user_id;
+  const type = ev && ev.type;
+  if (!userId || !type) return res.json({ ok: true }); // nothing actionable
+
+  const patch = {};
+  if (RC_GRANT.has(type)) { patch.plan = 'pro'; patch.subscription_status = type === 'INITIAL_PURCHASE' && ev.period_type === 'TRIAL' ? 'trialing' : 'active'; }
+  else if (RC_REVOKE.has(type)) { patch.plan = 'free'; patch.subscription_status = 'expired'; }
+  else if (type === 'CANCELLATION') { patch.subscription_status = 'canceled'; } // keep pro until expiration
+  else if (type === 'BILLING_ISSUE') { patch.subscription_status = 'billing_issue'; }
+  else return res.json({ ok: true }); // ignore other event types
+
+  if (ev.store) patch.subscription_store = String(ev.store).toLowerCase();
+  if (ev.expiration_at_ms) patch.current_period_end = new Date(Number(ev.expiration_at_ms)).toISOString();
+
+  // Service-role client: this is a trusted server-to-server call (no user JWT).
+  const { error } = await supabase.from('profiles').upsert({ id: userId, ...patch }, { onConflict: 'id' });
+  if (error) {
+    console.error('[rc] profile update failed:', error.message);
+    return res.status(500).json({ ok: false });
+  }
+  console.log('[rc]', type, '→', patch.plan || patch.subscription_status, 'for', userId);
   return res.json({ ok: true });
 });
 

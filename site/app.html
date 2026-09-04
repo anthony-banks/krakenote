@@ -484,7 +484,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
           <div class="nt-notes" id="ntNoteList"></div>
         </aside>
         <section class="nt-main" id="ntMain">
-          <div class="nt-empty" id="ntEmpty"><span style="font-size:34px">📝</span><h3 style="font-family:var(--head)">No note selected</h3><p>Pick a note, or create a new one.</p></div>
+          <div class="nt-empty" id="ntEmpty"><span style="font-size:34px">📝</span><h3 style="font-family:var(--head)">No note selected</h3><p>Pick a note, or create a new one.</p><button class="btn btn-primary" id="ntEmptyNew" style="margin-top:4px">＋ New note</button></div>
           <div id="ntEditor" class="hidden" style="display:flex;flex-direction:column;gap:10px;flex:1;min-height:0">
             <input class="nt-title" id="ntTitle" placeholder="Title" />
             <div class="nt-tools">
@@ -2013,6 +2013,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   }
 
   $('ntNewNote').addEventListener('click', createNote);
+  $('ntEmptyNew').addEventListener('click', createNote);
   $('ntAddNb').addEventListener('click', addNotebook);
   $('ntTitle').addEventListener('input', scheduleNoteSave);
   $('ntBody').addEventListener('input', scheduleNoteSave);

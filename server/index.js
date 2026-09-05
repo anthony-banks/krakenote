@@ -9,6 +9,7 @@ import { extractFromHtml } from '@extractus/article-extractor';
 import { YoutubeTranscript } from 'youtube-transcript';
 import dns from 'node:dns/promises';
 import net from 'node:net';
+import { stripHtml, isYouTube, ipIsPrivate, csvCell, isSuperuser as isSuperuserAllow } from './lib/util.js';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -30,8 +31,7 @@ const SUPERUSER_EMAILS = new Set(
     .map((e) => e.trim().toLowerCase())
     .filter(Boolean),
 );
-const isSuperuser = (email) =>
-  typeof email === 'string' && SUPERUSER_EMAILS.has(email.toLowerCase());
+const isSuperuser = (email) => isSuperuserAllow(email, SUPERUSER_EMAILS);
 
 // The service-role key bypasses RLS and must NEVER reach the browser.
 // It only lives here, server-side, injected via Railway env vars.
@@ -376,10 +376,6 @@ const DOCX_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingm
 const PPTX_TYPE = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
 const GEN_PROMPT = 'Generate study flashcards and a summary from this material.';
 
-function isYouTube(u) {
-  return /(^|\.)youtube\.com$/.test(u.hostname) || u.hostname === 'youtu.be' || u.hostname === 'm.youtube.com';
-}
-
 async function fetchYouTube(rawUrl) {
   // YouTube intermittently rate-limits datacenter IPs; retry transient failures.
   let lastErr;
@@ -404,17 +400,6 @@ async function fetchYouTube(rawUrl) {
   throw new Error("Couldn't get a transcript for that video — captions may be disabled or unavailable. You can paste the transcript text instead.");
 }
 
-function stripHtml(s) {
-  return s
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>').replace(/&#39;/g, "'").replace(/&quot;/g, '"')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
 // ── SSRF guard for user-supplied URL ingestion ──────────────────────────────
 // An authenticated user hands us a URL and we fetch it, so without this a request
 // could target the cloud metadata endpoint (169.254.169.254), localhost, or any
@@ -423,42 +408,8 @@ function stripHtml(s) {
 // redirects — re-validate on EVERY hop, so a public URL can't 302 to an internal
 // one. (Residual: DNS rebinding between our lookup and fetch's own resolve is not
 // closed here; a pinned-IP dispatcher is the follow-up if this needs hardening.)
-// An IPv4 tunnelled inside IPv6 (::ffff:1.2.3.4, or its hex form ::ffff:a9fe:a9fe
-// that WHATWG URL normalizes to, and IPv4-compatible ::a9fe:a9fe) must be judged by
-// its embedded IPv4, or the metadata/loopback IPs sail through the v6 checks. Returns
-// the dotted IPv4 when one is embedded, else the input unchanged.
-function embeddedV4(s) {
-  const dotted = s.match(/^::(?:ffff:)?(\d+\.\d+\.\d+\.\d+)$/);
-  if (dotted) return dotted[1];
-  const hex = s.match(/^::(?:ffff:)?([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
-  if (hex) {
-    const hi = parseInt(hex[1], 16), lo = parseInt(hex[2], 16);
-    return `${(hi >> 8) & 0xff}.${hi & 0xff}.${(lo >> 8) & 0xff}.${lo & 0xff}`;
-  }
-  return s;
-}
-
-function ipIsPrivate(ip) {
-  ip = embeddedV4(ip.toLowerCase()); // unwrap IPv4-mapped/compatible IPv6 to its v4
-  if (net.isIPv4(ip)) {
-    const [a, b] = ip.split('.').map(Number);
-    if (a === 10 || a === 127 || a === 0) return true;        // private / loopback / this-network
-    if (a === 169 && b === 254) return true;                  // link-local incl. metadata 169.254.169.254
-    if (a === 172 && b >= 16 && b <= 31) return true;         // private
-    if (a === 192 && b === 168) return true;                  // private
-    if (a === 100 && b >= 64 && b <= 127) return true;        // CGNAT
-    return false;
-  }
-  if (net.isIPv6(ip)) {
-    const low = ip.toLowerCase();
-    if (low === '::1' || low === '::') return true;           // loopback / unspecified
-    if (low.startsWith('fe80')) return true;                  // link-local
-    if (low.startsWith('fc') || low.startsWith('fd')) return true; // unique-local fc00::/7
-    return false;
-  }
-  return true; // unparseable → treat as unsafe
-}
-
+// The IP-classification core (ipIsPrivate + IPv4-in-IPv6 unwrapping) lives in
+// ./lib/util.js so it can be unit-tested without booting the server.
 async function assertPublicHost(hostname) {
   // WHATWG URL keeps IPv6 literals bracketed (e.g. "[::1]"); strip so net.isIP
   // recognizes them, otherwise they'd fall through to the DNS path.
@@ -1242,13 +1193,7 @@ app.get('/api/admin/waitlist', requireSuperuser, async (_req, res) => {
   return res.json({ count: count ?? rows.length, rows });
 });
 
-// Escape a single CSV cell per RFC 4180.
-function csvCell(value) {
-  const s = value == null ? '' : String(value);
-  return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
-}
-
-// Protected CSV download. SELECT only.
+// Protected CSV download. SELECT only. (csvCell lives in ./lib/util.js.)
 app.get('/api/admin/waitlist.csv', requireSuperuser, async (_req, res) => {
   const { data, error } = await supabase
     .from('waitlist')

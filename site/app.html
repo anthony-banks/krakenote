@@ -790,6 +790,13 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
 </div>
 
 <script src="/vendor/supabase.js"></script>
+<!-- Pure formatters live in /lib/format.js (unit-tested); expose them as globals
+     for the classic app script below. Deferred (module) but only referenced at
+     runtime by render/handler code, so it's always populated before first use. -->
+<script type="module">
+  import * as fmt from '/lib/format.js';
+  Object.assign(window, fmt);
+</script>
 <script>
 (function(){
   var $ = function(id){ return document.getElementById(id); };
@@ -1081,11 +1088,8 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     if (cb) cb(v);
   }
 
-  function escapeHtml(s){
-    return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-    });
-  }
+  // escapeHtml / fmtShortDate / fmtNoteTime / ntMarkdown are provided globally by
+  // /lib/format.js (loaded as a module below) — single source of truth, unit-tested.
 
   // Render LaTeX ($...$, $$...$$) inside an element via KaTeX auto-render.
   function mathify(el){
@@ -1354,11 +1358,6 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
 
   // Deck overview: the material (and AI summaries) the deck was built from.
   var SRC_LABEL = { text: '📝 Pasted notes', pdf: '📄 PDF', image: '🖼️ Image', url: '🔗 Article link', docx: '📄 Word document', pptx: '📊 Slides', file: '📄 File' };
-  function fmtShortDate(iso){
-    if (!iso) return '';
-    var d = new Date(iso); if (isNaN(d.getTime())) return '';
-    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-  }
   async function loadSources(){
     deckSigs = {}; // rebuilt from the deck's saved sources for the dup guard
     var ov = $('deckOverview');
@@ -1765,49 +1764,6 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   var ntCurrent = null;      // full loaded note {id,notebook_id,title,body,...}
   var ntSaveTimer = null;
   var ntPreviewOn = false;
-
-  function fmtNoteTime(iso){
-    if (!iso) return '';
-    var d = new Date(iso); if (isNaN(d.getTime())) return '';
-    var today = new Date();
-    if (d.toDateString() === today.toDateString()) return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-  }
-
-  // Tiny, safe Markdown → HTML (escape first, then apply a small subset).
-  function ntMarkdown(src){
-    var lines = String(src || '').split('\n');
-    var html = '', inUl = false, inPre = false;
-    function inline(t){
-      t = escapeHtml(t)
-        .replace(/`([^`]+)`/g, '<code>$1</code>')
-        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-        .replace(/(^|[^*])\*([^*]+)\*/g, '$1<em>$2</em>')
-        .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
-      return t;
-    }
-    for (var i = 0; i < lines.length; i++){
-      var ln = lines[i];
-      if (/^```/.test(ln)){ if (inPre){ html += '</pre>'; inPre = false; } else { if (inUl){ html += '</ul>'; inUl = false; } html += '<pre>'; inPre = true; } continue; }
-      if (inPre){ html += escapeHtml(ln) + '\n'; continue; }
-      var h = ln.match(/^(#{1,3})\s+(.*)$/);
-      if (h){ if (inUl){ html += '</ul>'; inUl = false; } html += '<h' + h[1].length + '>' + inline(h[2]) + '</h' + h[1].length + '>'; continue; }
-      var todo = ln.match(/^\s*-\s+\[( |x|X)\]\s+(.*)$/);
-      var li = ln.match(/^\s*[-*]\s+(.*)$/);
-      if (todo || li){
-        if (!inUl){ html += '<ul>'; inUl = true; }
-        if (todo){ html += '<li>' + (todo[1].toLowerCase() === 'x' ? '☑' : '☐') + ' ' + inline(todo[2]) + '</li>'; }
-        else { html += '<li>' + inline(li[1]) + '</li>'; }
-        continue;
-      }
-      if (inUl){ html += '</ul>'; inUl = false; }
-      if (ln.trim() === '') html += '<br>';
-      else html += '<p>' + inline(ln) + '</p>';
-    }
-    if (inUl) html += '</ul>';
-    if (inPre) html += '</pre>';
-    return html;
-  }
 
   async function loadNotes(){
     var out = await api('/api/notebooks');

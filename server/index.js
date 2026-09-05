@@ -1100,6 +1100,12 @@ app.get('/api/notes', requireUser, async (req, res) => {
   const nb = req.query.notebookId;
   if (nb === 'none') q = q.is('notebook_id', null);
   else if (typeof nb === 'string' && nb) q = q.eq('notebook_id', nb);
+  // Optional search: match title OR body, case-insensitive. Strip PostgREST filter
+  // metacharacters so a user term can't break out of / manipulate the .or() grammar.
+  const term = typeof req.query.q === 'string'
+    ? req.query.q.replace(/[%,()*\\:]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 100)
+    : '';
+  if (term) q = q.or(`title.ilike.%${term}%,body.ilike.%${term}%`);
   const { data, error } = await q;
   if (error) {
     console.error('[notes] list failed:', error.message);

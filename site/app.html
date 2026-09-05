@@ -470,6 +470,8 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
           <div class="nt-nbhead"><span>Notebooks</span><button class="nt-nbadd" id="ntAddNb" title="New notebook">＋</button></div>
           <div class="nt-nbs" id="ntNbList"></div>
           <button class="btn btn-primary nt-newnote" id="ntNewNote">＋ New note</button>
+          <input id="ntSearch" type="search" placeholder="Search notes…" autocomplete="off"
+            style="width:100%;box-sizing:border-box;margin-top:8px;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:transparent;color:var(--text);font-size:13px" />
           <div class="nt-notes" id="ntNoteList"></div>
         </aside>
         <section class="nt-main" id="ntMain">
@@ -1850,8 +1852,11 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   }
 
   async function loadNoteList(){
-    var qs = ntFilter === 'all' ? '' : '?notebookId=' + encodeURIComponent(ntFilter);
-    var out = await api('/api/notes' + qs);
+    var params = [];
+    if (ntFilter !== 'all') params.push('notebookId=' + encodeURIComponent(ntFilter));
+    var el = $('ntSearch'); var term = (el && el.value || '').trim();
+    if (term) params.push('q=' + encodeURIComponent(term));
+    var out = await api('/api/notes' + (params.length ? '?' + params.join('&') : ''));
     if (out.res.status === 401){ signOut(); return; }
     ntNotes = (out.res.ok && out.data.ok) ? (out.data.notes || []) : [];
     renderNoteList();
@@ -1861,7 +1866,8 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     var wrap = $('ntNoteList'); wrap.innerHTML = '';
     if (!ntNotes.length){
       var e = document.createElement('div'); e.style.color = 'var(--muted)'; e.style.fontSize = '13px'; e.style.padding = '10px 4px';
-      e.textContent = 'No notes here yet.'; wrap.appendChild(e); return;
+      var sEl = $('ntSearch'); var searching = sEl && sEl.value.trim();
+      e.textContent = searching ? 'No notes match your search.' : 'No notes here yet.'; wrap.appendChild(e); return;
     }
     ntNotes.forEach(function(n){
       var it = document.createElement('button'); it.className = 'nt-item' + (ntCurrent && ntCurrent.id === n.id ? ' active' : ''); it.type = 'button';
@@ -1973,6 +1979,8 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
 
   $('ntNewNote').addEventListener('click', createNote);
   $('ntAddNb').addEventListener('click', addNotebook);
+  var ntSearchT;
+  $('ntSearch').addEventListener('input', function(){ clearTimeout(ntSearchT); ntSearchT = setTimeout(loadNoteList, 200); });
   $('ntTitle').addEventListener('input', scheduleNoteSave);
   $('ntBody').addEventListener('input', scheduleNoteSave);
   $('ntMove').addEventListener('change', moveNote);

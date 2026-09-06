@@ -469,7 +469,10 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       .nt-body:empty:before{content:attr(data-ph);color:var(--muted)}
       .nt-body h1,.nt-body h2,.nt-body h3{font-family:var(--head);margin:.5em 0 .25em;line-height:1.3}
       .nt-body h1{font-size:1.5em}.nt-body h2{font-size:1.3em}.nt-body h3{font-size:1.12em}
-      .nt-body ul,.nt-body ol{padding-left:1.5em;margin:.35em 0}
+      .nt-body ul{padding-left:1.5em;margin:.35em 0}
+      /* Ordered lists need room for multi-digit markers (100s/1000s) or the
+         leading digit gets clipped at the left edge. */
+      .nt-body ol{padding-left:2.8em;margin:.35em 0}
       .nt-body li{margin:.15em 0}
       .nt-body a{color:var(--accent)}
       .nt-body u{text-decoration:underline}

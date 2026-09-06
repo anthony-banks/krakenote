@@ -468,7 +468,8 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       .nt-body{flex:1;min-height:320px;overflow-y:auto;font-family:var(--body);font-size:15px;line-height:1.75;color:var(--text);background:transparent;border:0;padding:4px 2px;outline:none}
       .nt-body:empty:before{content:attr(data-ph);color:var(--muted)}
       .nt-body h1,.nt-body h2,.nt-body h3{font-family:var(--head);margin:.5em 0 .25em;line-height:1.3}
-      .nt-body h1{font-size:1.5em}.nt-body h2{font-size:1.3em}.nt-body h3{font-size:1.12em}
+      /* rem (root-relative), not em — so if headings ever nest the sizes don't compound. */
+      .nt-body h1{font-size:1.6rem}.nt-body h2{font-size:1.35rem}.nt-body h3{font-size:1.15rem}
       .nt-body ul{padding-left:1.5em;margin:.35em 0}
       /* Ordered lists: use inside markers so multi-digit numbers (100s/1000s)
          are part of the line and can't be clipped on the left by the scrolling
@@ -2042,13 +2043,30 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
 
   // ── Note formatting toolbar (native rich text via execCommand) ──
   try { document.execCommand('styleWithCSS', false, false); } catch (e){} // prefer <b>/<i>/<u> tags over styled spans
+  // Heading of the block the caret is in (H1/H2/H3), or '' if none.
+  function ntCaretHeading(){
+    var s = window.getSelection(); if (!s.rangeCount) return '';
+    var el = s.getRangeAt(0).startContainer;
+    if (el.nodeType === 3) el = el.parentNode;
+    var editor = $('ntBody');
+    while (el && el !== editor){ if (/^H[1-6]$/.test(el.tagName || '')) return el.tagName; el = el.parentNode; }
+    return '';
+  }
+  // Apply a heading level, but first reset the block to a <div> so headings can
+  // never nest (which made text compound in size). Clicking the current level
+  // again toggles back to normal text.
+  function ntApplyHeading(tag){
+    var already = ntCaretHeading() === tag;
+    document.execCommand('formatBlock', false, 'div');
+    if (!already) document.execCommand('formatBlock', false, tag);
+  }
   var NT_FMT = {
     bold: function(){ document.execCommand('bold'); },
     italic: function(){ document.execCommand('italic'); },
     underline: function(){ document.execCommand('underline'); },
-    h1: function(){ document.execCommand('formatBlock', false, 'H1'); },
-    h2: function(){ document.execCommand('formatBlock', false, 'H2'); },
-    h3: function(){ document.execCommand('formatBlock', false, 'H3'); },
+    h1: function(){ ntApplyHeading('H1'); },
+    h2: function(){ ntApplyHeading('H2'); },
+    h3: function(){ ntApplyHeading('H3'); },
     bullet: function(){ document.execCommand('insertUnorderedList'); },
     number: function(){ document.execCommand('insertOrderedList'); },
     indent: function(){ document.execCommand('indent'); },   // sub-bullet / nest

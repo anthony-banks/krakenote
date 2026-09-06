@@ -108,7 +108,9 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
 
   /* ── App shell ── */
   .shell{display:grid;grid-template-columns:236px 1fr;min-height:calc(100vh - 70px)}
-  aside{position:sticky;top:70px;align-self:start;height:calc(100vh - 70px);overflow-y:auto;border-right:1px solid var(--border);padding:22px 14px;display:flex;flex-direction:column;gap:6px}
+  /* Nav-sidebar styling scoped to #sidebar — a bare `aside` selector also hit the
+     notes list (<aside class="nt-side">) and gave it nav sizing/border. */
+  #sidebar{position:sticky;top:70px;align-self:start;height:calc(100vh - 70px);overflow-y:auto;border-right:1px solid var(--border);padding:22px 14px;display:flex;flex-direction:column;gap:6px}
   .navlink .ic{width:26px;height:26px}
   .logout-ic{width:26px;height:26px;flex:none;stroke:var(--danger);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
   .nav-collapse{align-self:flex-end;background:transparent;border:1px solid var(--border);color:var(--muted);width:30px;height:30px;border-radius:9px;cursor:pointer;font-size:18px;line-height:1;display:none;align-items:center;justify-content:center;margin-bottom:4px}
@@ -119,7 +121,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     #appView.collapsed .nav-label{display:none}
     #appView.collapsed .navlink{justify-content:center;padding:11px 0}
     #appView.collapsed .nav-collapse{align-self:center}
-    #appView.collapsed aside{padding:22px 8px}
+    #appView.collapsed #sidebar{padding:22px 8px}
   }
   .gen-busy{display:none;align-items:center;gap:10px;font-family:var(--head);font-weight:600;font-size:14px;color:var(--accent)}
   .gen-busy.on{display:flex}
@@ -309,8 +311,11 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
 
   @media(max-width:820px){
     .shell{grid-template-columns:1fr}
-    aside{position:fixed;top:70px;left:0;bottom:0;width:236px;background:var(--bg);z-index:40;transform:translateX(-100%);transition:transform .2s ease}
-    aside.open{transform:translateX(0)}
+    /* Scope the off-canvas drawer to the app NAV sidebar only. A bare `aside`
+       selector also matched the notes list (<aside class="nt-side">) and pushed
+       it off-screen on mobile, leaving only the "No note selected" pane. */
+    #sidebar{position:fixed;top:70px;left:0;bottom:0;width:236px;background:var(--bg);z-index:40;transform:translateX(-100%);transition:transform .2s ease}
+    #sidebar.open{transform:translateX(0)}
     .menu-btn{display:inline-flex}
     main{padding:26px 20px 60px}
     #whoami{display:none}

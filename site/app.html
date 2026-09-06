@@ -470,9 +470,11 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       .nt-body h1,.nt-body h2,.nt-body h3{font-family:var(--head);margin:.5em 0 .25em;line-height:1.3}
       .nt-body h1{font-size:1.5em}.nt-body h2{font-size:1.3em}.nt-body h3{font-size:1.12em}
       .nt-body ul{padding-left:1.5em;margin:.35em 0}
-      /* Ordered lists need room for multi-digit markers (100s/1000s) or the
-         leading digit gets clipped at the left edge. */
-      .nt-body ol{padding-left:2.8em;margin:.35em 0}
+      /* Ordered lists: use inside markers so multi-digit numbers (100s/1000s)
+         are part of the line and can't be clipped on the left by the scrolling
+         note body (overflow-y:auto also clips the x-axis). */
+      .nt-body ol{list-style-position:inside;padding-left:.4em;margin:.35em 0}
+      .nt-body ol li{padding-left:.25em}
       .nt-body li{margin:.15em 0}
       .nt-body a{color:var(--accent)}
       .nt-body u{text-decoration:underline}

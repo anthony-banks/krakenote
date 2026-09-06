@@ -504,7 +504,9 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
               <button type="button" data-fmt="italic" title="Italic" style="font-style:italic">I</button>
               <button type="button" data-fmt="underline" title="Underline" style="text-decoration:underline">U</button>
               <span class="nt-fmtsep"></span>
-              <button type="button" data-fmt="heading" title="Heading">H</button>
+              <button type="button" data-fmt="h1" title="Heading 1">H1</button>
+              <button type="button" data-fmt="h2" title="Heading 2">H2</button>
+              <button type="button" data-fmt="h3" title="Heading 3">H3</button>
               <button type="button" data-fmt="bullet" title="Bullet list">•</button>
               <button type="button" data-fmt="number" title="Numbered list">1.</button>
               <span class="nt-fmtsep"></span>
@@ -2039,7 +2041,9 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     bold: function(){ document.execCommand('bold'); },
     italic: function(){ document.execCommand('italic'); },
     underline: function(){ document.execCommand('underline'); },
-    heading: function(){ document.execCommand('formatBlock', false, 'H2'); },
+    h1: function(){ document.execCommand('formatBlock', false, 'H1'); },
+    h2: function(){ document.execCommand('formatBlock', false, 'H2'); },
+    h3: function(){ document.execCommand('formatBlock', false, 'H3'); },
     bullet: function(){ document.execCommand('insertUnorderedList'); },
     number: function(){ document.execCommand('insertOrderedList'); },
     indent: function(){ document.execCommand('indent'); },   // sub-bullet / nest

@@ -930,16 +930,21 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   }
 
   function renderView(key){
-    currentView = key;
-    var v = VIEWS[key] || VIEWS.home;
-    $('viewTitle').textContent = v.title;
-    $('viewSub').textContent = v.sub;
-    $('statCards').classList.toggle('hidden', key !== 'home');
-    // Hide every view panel + the deck-detail sub-view, then show the active one.
-    Object.keys(VIEW_PANELS).forEach(function(k){ $(VIEW_PANELS[k]).classList.add('hidden'); });
-    $('deckDetailPanel').classList.add('hidden');
-    $(VIEW_PANELS[key] || 'homePanel').classList.remove('hidden');
-    setActiveNav(key);
+    // Swap panels inside a View Transition for a smooth crossfade where supported;
+    // falls back to an instant swap otherwise (progressive enhancement).
+    var swap = function(){
+      currentView = key;
+      var v = VIEWS[key] || VIEWS.home;
+      $('viewTitle').textContent = v.title;
+      $('viewSub').textContent = v.sub;
+      $('statCards').classList.toggle('hidden', key !== 'home');
+      // Hide every view panel + the deck-detail sub-view, then show the active one.
+      Object.keys(VIEW_PANELS).forEach(function(k){ $(VIEW_PANELS[k]).classList.add('hidden'); });
+      $('deckDetailPanel').classList.add('hidden');
+      $(VIEW_PANELS[key] || 'homePanel').classList.remove('hidden');
+      setActiveNav(key);
+    };
+    if (document.startViewTransition) document.startViewTransition(swap); else swap();
     if (key === 'home') loadHome();
     else if (key === 'notes') loadNotes();
     else if (key === 'decks') loadDecks();

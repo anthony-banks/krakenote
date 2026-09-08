@@ -320,9 +320,24 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     main{padding:26px 20px 60px}
     #whoami{display:none}
   }
+
+  /* ── Toasts: transient, accessible action feedback (Saved / added / errors) ── */
+  #toasts{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:1000;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none}
+  .toast{pointer-events:auto;min-width:180px;max-width:min(88vw,420px);font-family:var(--body);font-size:14px;color:var(--text);background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:12px;padding:11px 14px;box-shadow:0 8px 24px rgba(0,0,0,.18);opacity:0;transform:translateY(8px);transition:opacity .16s ease,transform .16s ease;cursor:pointer}
+  .toast.show{opacity:1;transform:none}
+  .toast.ok{border-left-color:#3ba55d}
+  .toast.err{border-left-color:var(--danger)}
+
+  /* ── Tooltips: styled + accessible hints for icon-only controls. Pair data-tip
+     with aria-label so screen readers still get a name. Positioned via CSS. ── */
+  [data-tip]{position:relative}
+  [data-tip]::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 7px);left:50%;transform:translateX(-50%) translateY(3px);white-space:nowrap;background:var(--text);color:var(--bg);font-family:var(--body);font-size:12px;font-weight:500;padding:5px 8px;border-radius:7px;box-shadow:0 4px 14px rgba(0,0,0,.22);z-index:1100;opacity:0;pointer-events:none;transition:opacity .12s ease,transform .12s ease}
+  [data-tip]:hover::after,[data-tip]:focus-visible::after{opacity:1;transform:translateX(-50%) translateY(0)}
+  @media (prefers-reduced-motion: reduce){.toast,[data-tip]::after{transition:none}}
 </style>
 </head>
 <body>
+<div id="toasts" aria-live="polite" aria-atomic="true"></div>
 
 <nav>
   <div class="bar">
@@ -450,10 +465,14 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       .nt-nb:hover .nbx{opacity:.7}
       .nt-newnote{margin-top:4px}
       .nt-notes{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:6px;max-height:60vh}
-      .nt-item{text-align:left;background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:11px 13px;cursor:pointer}
+      .nt-item{position:relative;text-align:left;background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:11px 13px;cursor:pointer}
       .nt-item:hover{border-color:var(--accent)}
       .nt-item.active{border-color:var(--accent);background:var(--surface-2)}
-      .nt-item .t{font-family:var(--head);font-weight:600;font-size:14.5px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .nt-item:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+      .ntx{position:absolute;top:8px;right:8px;border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:12px;line-height:1;padding:3px 5px;border-radius:7px;opacity:0;transition:opacity .12s ease}
+      .nt-item:hover .ntx,.nt-item:focus-within .ntx,.ntx:focus-visible{opacity:1}
+      .ntx:hover,.ntx:focus-visible{color:var(--danger);background:color-mix(in srgb,var(--danger) 12%,transparent)}
+      .nt-item .t{font-family:var(--head);font-weight:600;font-size:14.5px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:18px}
       .nt-item .s{font-size:12.5px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
       .nt-item .d{font-size:11px;color:var(--muted);margin-top:4px}
       .nt-main{flex:1;display:flex;flex-direction:column;gap:12px;min-width:0;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:22px 24px}
@@ -1087,7 +1106,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     showConfirm('Delete deck?', 'This permanently removes “' + d.title + '” and all of its cards.', 'Delete', async function(){
       var out = await api('/api/decks/' + encodeURIComponent(d.id), { method:'DELETE' });
       if (out.res.status === 401){ signOut(); return; }
-      if (!out.res.ok || !out.data.ok){ window.alert(out.data.error || 'Could not delete the deck.'); return; }
+      if (!out.res.ok || !out.data.ok){ toast('err', out.data.error || 'Could not delete the deck.'); return; }
       await loadDecks();
     });
   }
@@ -1226,6 +1245,22 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     // clear left inline display:none set, so later errors were set but invisible.)
     m.style.display = kind ? '' : 'none';
   }
+  // Transient bottom-center feedback. kind: 'ok' | 'err' | '' (info). Announced
+  // through the #toasts aria-live region; errors use role=alert. Click to dismiss.
+  function toast(kind, text){
+    var wrap = document.getElementById('toasts');
+    if (!wrap) return;
+    var t = document.createElement('div');
+    t.className = 'toast' + (kind ? ' ' + kind : '');
+    t.setAttribute('role', kind === 'err' ? 'alert' : 'status');
+    t.textContent = text || '';
+    wrap.appendChild(t);
+    requestAnimationFrame(function(){ t.classList.add('show'); });
+    var life = kind === 'err' ? 5000 : 2600;
+    var to = setTimeout(remove, life);
+    function remove(){ clearTimeout(to); t.classList.remove('show'); setTimeout(function(){ if (t.parentNode) t.parentNode.removeChild(t); }, 200); }
+    t.addEventListener('click', remove);
+  }
   function cardsState(emoji, title, body){
     var s = $('cardsState'); s.classList.remove('hidden');
     s.innerHTML = '<span class="emoji"></span><h3></h3><p></p>';
@@ -1331,12 +1366,12 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   async function importCsv(file){
     var text = await readFileText(file);
     var cards = parseCsvCards(text);
-    if (!cards.length){ window.alert('No valid rows found. Expected columns: front, back[, hint, type].'); return; }
+    if (!cards.length){ toast('err', 'No valid rows found. Expected columns: front, back[, hint, type].'); return; }
     var out = await api('/api/decks/' + encodeURIComponent(currentDeck.id) + '/cards', { method:'POST', body: JSON.stringify({ cards: cards }) });
     if (out.res.status === 401){ signOut(); return; }
-    if (out.res.ok && out.data.ok){ await loadCards(); window.alert('Imported ' + out.data.added + ' card' + (out.data.added === 1 ? '' : 's') + '.'); }
+    if (out.res.ok && out.data.ok){ await loadCards(); toast('ok', 'Imported ' + out.data.added + ' card' + (out.data.added === 1 ? '' : 's') + '.'); }
     else if (out.data.code === 'free_limit'){ openUpgrade(null); }
-    else window.alert(out.data.error || 'Import failed.');
+    else toast('err', out.data.error || 'Import failed.');
   }
   function mkCardAct(title, icon, danger){
     var b = document.createElement('button'); b.className = 'card-act' + (danger ? ' danger' : ''); b.type = 'button'; b.title = title;
@@ -1910,12 +1945,18 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       e.textContent = searching ? 'No notes match your search.' : 'No notes here yet.'; wrap.appendChild(e); return;
     }
     ntNotes.forEach(function(n){
-      var it = document.createElement('button'); it.className = 'nt-item' + (ntCurrent && ntCurrent.id === n.id ? ' active' : ''); it.type = 'button';
+      var it = document.createElement('div'); it.className = 'nt-item' + (ntCurrent && ntCurrent.id === n.id ? ' active' : '');
+      it.setAttribute('role', 'button'); it.tabIndex = 0;
       var t = document.createElement('div'); t.className = 't'; t.textContent = n.title || 'Untitled';
       var s = document.createElement('div'); s.className = 's'; s.textContent = n.snippet || 'No additional text';
       var d = document.createElement('div'); d.className = 'd'; d.textContent = fmtNoteTime(n.updated_at);
       it.appendChild(t); it.appendChild(s); it.appendChild(d);
+      var x = document.createElement('button'); x.className = 'ntx'; x.type = 'button'; x.textContent = '✕';
+      x.title = 'Delete note'; x.setAttribute('aria-label', 'Delete note ' + (n.title || 'Untitled'));
+      x.addEventListener('click', function(e){ e.stopPropagation(); deleteNoteById(n.id, n.title); });
+      it.appendChild(x);
       it.addEventListener('click', function(){ openNote(n.id); });
+      it.addEventListener('keydown', function(e){ if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); openNote(n.id); } });
       wrap.appendChild(it);
     });
   }
@@ -2008,12 +2049,24 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     if (out.res.ok && out.data.ok){ ntCurrent.notebook_id = nb; loadNotes(); }
   }
 
+  // Delete any note by id (from the list ✕ or the editor). Confirms first, clears
+  // the editor if the open note was the one removed, and refreshes the list.
+  function deleteNoteById(id, title){
+    if (!id) return;
+    showConfirm('Delete note?', 'This permanently deletes "' + (title || 'Untitled') + '".', 'Delete', async function(){
+      var out = await api('/api/notes/' + encodeURIComponent(id), { method:'DELETE' });
+      if (out.res.ok && out.data.ok){
+        if (ntCurrent && ntCurrent.id === id){ ntCurrent = null; showNoteEditor(false); }
+        toast('ok', 'Note deleted');
+        loadNotes();
+      } else {
+        toast('err', 'Could not delete the note.');
+      }
+    });
+  }
   function deleteNote(){
     if (!ntCurrent) return;
-    showConfirm('Delete note?', 'This permanently deletes "' + (ntCurrent.title || 'Untitled') + '".', 'Delete', async function(){
-      var out = await api('/api/notes/' + encodeURIComponent(ntCurrent.id), { method:'DELETE' });
-      if (out.res.ok && out.data.ok){ ntCurrent = null; showNoteEditor(false); loadNotes(); }
-    });
+    deleteNoteById(ntCurrent.id, ntCurrent.title);
   }
 
   function addNotebook(){
@@ -2088,6 +2141,19 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       scheduleNoteSave();
     });
   });
+
+  // Promote native `title` hints on icon-only controls to styled, accessible
+  // tooltips (data-tip for the visual, aria-label to keep a screen-reader name).
+  (function upgradeTooltips(){
+    document.querySelectorAll('#ntFmtBar button[title], #ntAddNb[title]').forEach(function(el){
+      var tip = el.getAttribute('title'); if (!tip) return;
+      el.setAttribute('data-tip', tip);
+      if (!el.getAttribute('aria-label')) el.setAttribute('aria-label', tip);
+      el.removeAttribute('title'); // avoid a duplicate native tooltip alongside the styled one
+    });
+    var mv = $('ntMove'); // <select> can't render ::after; just give it an accessible name
+    if (mv && mv.getAttribute('title') && !mv.getAttribute('aria-label')) mv.setAttribute('aria-label', mv.getAttribute('title'));
+  })();
 
   // ── Progress ──
   async function loadProgress(){

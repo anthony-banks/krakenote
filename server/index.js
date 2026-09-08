@@ -51,6 +51,10 @@ const anthropic = ANTHROPIC_API_KEY ? new Anthropic({ apiKey: ANTHROPIC_API_KEY 
 // Shared secret for the RevenueCat webhook (set as the Authorization header in
 // the RevenueCat dashboard). Server-side only.
 const REVENUECAT_WEBHOOK_SECRET = process.env.REVENUECAT_WEBHOOK_SECRET;
+// RevenueCat fires every event (sandbox AND production) to every configured
+// webhook. Set this per deployment (staging=SANDBOX, prod=PRODUCTION) so a test
+// purchase never mutates the other environment's data. Unset = process all.
+const RC_WEBHOOK_ENVIRONMENT = (process.env.RC_WEBHOOK_ENVIRONMENT || '').toUpperCase();
 
 const app = express();
 
@@ -1202,6 +1206,13 @@ app.post('/api/rc/webhook', async (req, res) => {
   const userId = ev && ev.app_user_id;
   const type = ev && ev.type;
   if (!userId || !type) return res.json({ ok: true }); // nothing actionable
+
+  // Only act on this deployment's environment (so a SANDBOX test purchase can't
+  // touch PRODUCTION data, and vice versa). Ack-and-ignore anything else.
+  if (RC_WEBHOOK_ENVIRONMENT && ev.environment &&
+      String(ev.environment).toUpperCase() !== RC_WEBHOOK_ENVIRONMENT) {
+    return res.json({ ok: true });
+  }
 
   const patch = {};
   if (RC_GRANT.has(type)) { patch.plan = 'pro'; patch.subscription_status = type === 'INITIAL_PURCHASE' && ev.period_type === 'TRIAL' ? 'trialing' : 'active'; }

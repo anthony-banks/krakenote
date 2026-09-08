@@ -1396,6 +1396,23 @@ app.use('/vendor/katex', express.static(join(__dirname, '..', 'node_modules', 'k
 app.use(express.static(SITE_DIR, { extensions: ['html'] }));
 app.get('*', (_req, res) => res.sendFile(join(SITE_DIR, 'index.html')));
 
+// Keep the Supabase project from idling out. The free tier auto-pauses after
+// ~7 days with no activity, which would break the RC webhook and logins. Since
+// this server runs 24/7 on Railway, a tiny daily query is enough to keep the
+// database "active" — no external cron needed. (KRA-31: revisit once prod
+// Supabase is on a paid tier, where auto-pause no longer applies.)
+if (supabase) {
+  const keepAlive = async () => {
+    try {
+      await supabase.from('profiles').select('id', { head: true, count: 'exact' });
+    } catch (e) {
+      console.warn('keep-alive ping failed:', e?.message || e);
+    }
+  };
+  setTimeout(keepAlive, 30 * 1000).unref?.();
+  setInterval(keepAlive, 24 * 60 * 60 * 1000).unref?.();
+}
+
 app.listen(PORT, () => {
   console.log(`Krakenote site listening on :${PORT} (supabase: ${Boolean(supabase)})`);
 });

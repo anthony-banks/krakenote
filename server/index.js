@@ -51,6 +51,10 @@ const anthropic = ANTHROPIC_API_KEY ? new Anthropic({ apiKey: ANTHROPIC_API_KEY 
 // Shared secret for the RevenueCat webhook (set as the Authorization header in
 // the RevenueCat dashboard). Server-side only.
 const REVENUECAT_WEBHOOK_SECRET = process.env.REVENUECAT_WEBHOOK_SECRET;
+// RevenueCat Web Billing PUBLIC api key — safe to expose to the browser. It's
+// served via /api/config so staging can use a sandbox key (Stripe test mode) and
+// prod a live key, without hard-coding either in the client.
+const REVENUECAT_WEB_KEY = process.env.REVENUECAT_WEB_KEY || '';
 // RevenueCat fires every event (sandbox AND production) to every configured
 // webhook. Set this per deployment (staging=SANDBOX, prod=PRODUCTION) so a test
 // purchase never mutates the other environment's data. Unset = process all.
@@ -170,7 +174,14 @@ app.get('/api/config', (_req, res) => {
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
     return res.status(503).json({ ok: false, error: 'Accounts are not configured on this server yet.' });
   }
-  return res.json({ ok: true, supabaseUrl: SUPABASE_URL, supabaseAnonKey: SUPABASE_ANON_KEY });
+  return res.json({
+    ok: true,
+    supabaseUrl: SUPABASE_URL,
+    supabaseAnonKey: SUPABASE_ANON_KEY,
+    // Empty string when web billing isn't configured for this environment yet;
+    // the client falls back to the "request access" flow in that case.
+    revenuecatWebKey: REVENUECAT_WEB_KEY,
+  });
 });
 
 // POST /api/auth/signup { email, password }

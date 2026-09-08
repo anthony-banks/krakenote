@@ -1,0 +1,37 @@
+name: e2e
+
+# Runs the Playwright login smoke test against staging. Triggers on PRs into the
+# deploy branches and can be run on demand. Credentials come from repo secrets
+# (E2E_EMAIL / E2E_PASSWORD); the target URL defaults to staging.
+on:
+  pull_request:
+    branches: [main, staging]
+  workflow_dispatch:
+
+jobs:
+  playwright:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Run login smoke test
+        run: npm run test:e2e
+        env:
+          E2E_BASE_URL: https://krakenote-staging.up.railway.app
+          E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
+          E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
+      - name: Upload Playwright report
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7

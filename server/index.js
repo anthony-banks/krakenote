@@ -1189,7 +1189,10 @@ app.delete('/api/notes/:id', requireUser, async (req, res) => {
 // (Stripe). It POSTs subscription events here; we map them to profiles.plan.
 // Auth: RevenueCat sends the Authorization header we configure in its dashboard.
 // app_user_id is the Supabase user id (set client-side via Purchases.logIn).
-const RC_GRANT = new Set(['INITIAL_PURCHASE', 'RENEWAL', 'UNCANCELLATION', 'PRODUCT_CHANGE', 'NON_RENEWING_PURCHASE', 'SUBSCRIPTION_EXTENDED', 'TRANSFER']);
+// TRANSFER is handled separately below — its payload carries no app_user_id
+// (it moves the sub between transferred_from -> transferred_to), so it can't go
+// through the app_user_id path these types use.
+const RC_GRANT = new Set(['INITIAL_PURCHASE', 'RENEWAL', 'UNCANCELLATION', 'PRODUCT_CHANGE', 'NON_RENEWING_PURCHASE', 'SUBSCRIPTION_EXTENDED']);
 const RC_REVOKE = new Set(['EXPIRATION']);
 // Note: CANCELLATION = auto-renew off but still active until EXPIRATION → no change.
 // BILLING_ISSUE → keep access (grace); mark status only.
@@ -1203,9 +1206,8 @@ app.post('/api/rc/webhook', async (req, res) => {
   if (!supabase) return res.status(503).json({ ok: false });
 
   const ev = req.body && req.body.event;
-  const userId = ev && ev.app_user_id;
   const type = ev && ev.type;
-  if (!userId || !type) return res.json({ ok: true }); // nothing actionable
+  if (!type) return res.json({ ok: true }); // nothing actionable
 
   // Only act on this deployment's environment (so a SANDBOX test purchase can't
   // touch PRODUCTION data, and vice versa). Ack-and-ignore anything else.
@@ -1213,6 +1215,40 @@ app.post('/api/rc/webhook', async (req, res) => {
       String(ev.environment).toUpperCase() !== RC_WEBHOOK_ENVIRONMENT) {
     return res.json({ ok: true });
   }
+
+  // TRANSFER events carry no app_user_id — the subscription moves from
+  // transferred_from -> transferred_to (e.g. a user restores on a new account).
+  // Grant Pro to the new owner(s) and revoke it from the previous owner(s),
+  // since only one account holds the entitlement at a time. Anonymous RevenueCat
+  // ids ($RCAnonymousID:…) aren't real profiles, so skip them.
+  if (type === 'TRANSFER') {
+    const isReal = (id) => typeof id === 'string' && !id.startsWith('$RCAnonymousID');
+    const to = (Array.isArray(ev.transferred_to) ? ev.transferred_to : []).filter(isReal);
+    const from = (Array.isArray(ev.transferred_from) ? ev.transferred_from : []).filter(isReal);
+    const store = ev.store ? String(ev.store).toLowerCase() : null;
+    try {
+      for (const id of to) {
+        const row = { id, plan: 'pro', subscription_status: 'active' };
+        if (store) row.subscription_store = store;
+        const { error } = await supabase.from('profiles').upsert(row, { onConflict: 'id' });
+        if (error) throw error;
+      }
+      if (from.length) {
+        // .update()...in() only touches rows that exist — safe if an id has no profile.
+        const { error } = await supabase.from('profiles')
+          .update({ plan: 'free', subscription_status: 'expired' }).in('id', from);
+        if (error) throw error;
+      }
+    } catch (e) {
+      console.error('[rc] transfer failed:', e.message || e);
+      return res.status(500).json({ ok: false });
+    }
+    console.log('[rc] TRANSFER', from, '->', to);
+    return res.json({ ok: true });
+  }
+
+  const userId = ev.app_user_id;
+  if (!userId) return res.json({ ok: true }); // non-transfer events need a user
 
   const patch = {};
   if (RC_GRANT.has(type)) { patch.plan = 'pro'; patch.subscription_status = type === 'INITIAL_PURCHASE' && ev.period_type === 'TRIAL' ? 'trialing' : 'active'; }

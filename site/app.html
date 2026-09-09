@@ -334,6 +334,15 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   [data-tip]::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 7px);left:50%;transform:translateX(-50%) translateY(3px);white-space:nowrap;background:var(--text);color:var(--bg);font-family:var(--body);font-size:12px;font-weight:500;padding:5px 8px;border-radius:7px;box-shadow:0 4px 14px rgba(0,0,0,.22);z-index:1100;opacity:0;pointer-events:none;transition:opacity .12s ease,transform .12s ease}
   [data-tip]:hover::after,[data-tip]:focus-visible::after{opacity:1;transform:translateX(-50%) translateY(0)}
   @media (prefers-reduced-motion: reduce){.toast,[data-tip]::after{transition:none}}
+
+  /* ── Upgrade modal: web checkout plan buttons ── */
+  .upg-plans{display:flex;flex-direction:column;gap:10px;margin-top:4px}
+  .upg-plan{display:grid;grid-template-columns:1fr auto;grid-template-areas:"t p" "s p";gap:0 10px;text-align:left;background:var(--surface-2);border:1.5px solid var(--border);border-radius:12px;padding:12px 14px;cursor:pointer;color:var(--text);transition:border-color .12s ease}
+  .upg-plan:hover,.upg-plan:focus-visible{border-color:var(--accent);outline:none}
+  .upg-plan.best{border-color:var(--accent)}
+  .upg-plan-t{grid-area:t;font-family:var(--head);font-weight:700;font-size:15px}
+  .upg-plan-p{grid-area:p;align-self:center;font-weight:700;font-size:15px}
+  .upg-plan-s{grid-area:s;font-size:12px;color:var(--muted);margin-top:2px}
 </style>
 </head>
 <body>
@@ -997,6 +1006,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     show('appView');
     await loadPlan();
     renderView('home'); // loads real stats via /api/stats
+    setupBilling(session.user && session.user.id); // fire-and-forget; enables checkout
   }
 
   // ── Decks: talk to the RLS-protected API as the signed-in user ──
@@ -2199,16 +2209,79 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       if (out.data.email) currentUserEmail = out.data.email;
     }
   }
+
+  // ── Web billing (RevenueCat + Stripe) ──
+  // rcWebKey is served per-environment via /api/config (empty when unset, which
+  // makes openUpgrade() fall back to the request-access flow). We identify the
+  // RevenueCat customer as the Supabase user id so the webhook's app_user_id
+  // matches profiles.id. Products live in the 'web' offering (iOS uses 'default').
+  var rcWebKey = '', rcConfigured = false, rcPackages = null, RCPurchases = null;
+  async function setupBilling(userId){
+    if (!rcWebKey || !userId || rcPackages) return;
+    try {
+      if (!RCPurchases){ var mod = await import('/vendor/purchases-js.js'); RCPurchases = mod.Purchases; }
+      if (!rcConfigured){ RCPurchases.configure({ apiKey: rcWebKey, appUserId: userId }); rcConfigured = true; }
+      var offerings = await RCPurchases.getSharedInstance().getOfferings();
+      var web = offerings && offerings.all && offerings.all['web'];
+      rcPackages = web ? { monthly: web.monthly || null, annual: web.annual || null } : null;
+    } catch (e){ rcPackages = null; } // billing optional — fall back to request-access
+  }
+  function reflectPlan(){
+    var ab = $('acctUpgradeBtn'); if (ab) ab.classList.toggle('hidden', currentPlan === 'pro');
+    var ap = $('acctPlan'); if (ap) ap.textContent = currentPlan === 'pro' ? 'Pro — AI unlocked' : 'Free — manual study';
+  }
+  function planBtn(which, title, price, sub){
+    var b = document.createElement('button');
+    b.type = 'button'; b.className = 'upg-plan' + (which === 'annual' ? ' best' : '');
+    b.innerHTML = '<span class="upg-plan-t"></span><span class="upg-plan-p"></span><span class="upg-plan-s"></span>';
+    b.querySelector('.upg-plan-t').textContent = title;
+    b.querySelector('.upg-plan-p').textContent = price;
+    b.querySelector('.upg-plan-s').textContent = sub;
+    b.addEventListener('click', function(){ startPurchase(which); });
+    return b;
+  }
+  async function startPurchase(which){
+    var pkg = rcPackages && (which === 'annual' ? rcPackages.annual : rcPackages.monthly);
+    if (!pkg || !RCPurchases) return;
+    $('upgradeMsg').textContent = 'Opening secure checkout…';
+    try {
+      var result = await RCPurchases.getSharedInstance().purchase({ rcPackage: pkg });
+      var active = result && result.customerInfo && result.customerInfo.entitlements && result.customerInfo.entitlements.active;
+      if (active && active['krakenote_pro']) currentPlan = 'pro';
+      $('upgradeMsg').textContent = '';
+      $('upgradeModal').classList.add('hidden');
+      toast('ok', 'Welcome to Krakenote Pro! 🎉');
+      reflectPlan();
+      // The webhook writes profiles.plan server-side; reconcile a moment later.
+      setTimeout(function(){ loadPlan().then(reflectPlan); }, 2500);
+    } catch (e){
+      if (e && (e.errorCode === 'UserCancelledError' || /cancel/i.test(e.message || ''))){ $('upgradeMsg').textContent = ''; return; }
+      $('upgradeMsg').textContent = (e && e.message) || 'Checkout could not be completed. Please try again.';
+    }
+  }
   function updateUpgradeBtn(){
     var b = $('upgradeReqBtn');
     if (accessRequested){ b.textContent = 'Access requested ✓'; b.disabled = true; }
     else { b.textContent = 'Request access'; b.disabled = false; }
   }
   function openUpgrade(feature){
-    $('upgradeBody').innerHTML = (feature ? '<b>' + feature + '</b> is part of Krakenote Pro. ' : "You've hit a free-plan limit. ") +
-      'The free plan lets you build decks and study manually (up to 2 decks / 50 cards). AI generation, fact-check, and higher limits unlock with Pro — request access and we\'ll review it.';
-    $('upgradeMsg').textContent = accessRequested ? 'Your access request is pending review.' : '';
-    updateUpgradeBtn();
+    var pitch = (feature ? '<b>' + feature + '</b> is part of Krakenote Pro. ' : "You've hit a free-plan limit. ") +
+      'Unlock AI generation, fact-check, and higher limits with Pro.';
+    if (rcPackages && (rcPackages.monthly || rcPackages.annual)){
+      // Real checkout (RevenueCat + Stripe).
+      $('upgradeBody').innerHTML = '<p style="margin:0 0 12px">' + pitch + '</p><div class="upg-plans"></div>';
+      var wrap = $('upgradeBody').querySelector('.upg-plans');
+      if (rcPackages.annual) wrap.appendChild(planBtn('annual', 'Annual', '$59.99/yr', '7-day free trial · best value'));
+      if (rcPackages.monthly) wrap.appendChild(planBtn('monthly', 'Monthly', '$5.99/mo', '7-day free trial'));
+      $('upgradeReqBtn').classList.add('hidden');
+      $('upgradeMsg').textContent = '';
+    } else {
+      // Fallback when web billing isn't configured for this environment.
+      $('upgradeReqBtn').classList.remove('hidden');
+      $('upgradeBody').innerHTML = pitch + ' Request access and we\'ll review it.';
+      $('upgradeMsg').textContent = accessRequested ? 'Your access request is pending review.' : '';
+      updateUpgradeBtn();
+    }
     $('upgradeModal').classList.remove('hidden');
   }
   async function requestAccess(){
@@ -2464,6 +2537,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       var r = await fetch('/api/config', { cache:'no-store' });
       cfg = await r.json().catch(function(){ return {}; });
       if (!r.ok || !cfg.ok) throw new Error(cfg.error || 'not configured');
+      rcWebKey = cfg.revenuecatWebKey || '';
     } catch (ex){
       show('authView');
       $('authForm').classList.add('hidden');

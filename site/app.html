@@ -1026,9 +1026,15 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       { 'Content-Type':'application/json', 'Authorization':'Bearer ' + t },
       opts.headers || {}
     );
-    var res = await fetch(path, opts);
-    var data = await res.json().catch(function(){ return {}; });
-    return { res: res, data: data };
+    try {
+      var res = await fetch(path, opts);
+      var data = await res.json().catch(function(){ return {}; });
+      return { res: res, data: data };
+    } catch (e){
+      // Network failure (offline / DNS / CORS): return a uniform shape so callers
+      // never hang with a permanently-disabled button — res.ok is false, status 0.
+      return { res: { ok: false, status: 0 }, data: { ok: false, error: 'Network error — check your connection and try again.' } };
+    }
   }
 
   function setDecksState(emoji, title, body){
@@ -1566,7 +1572,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
           setBusy('Generating ' + (i + 1) + ' of ' + files.length + ': ' + files[i].name + '…');
           var body = await fileToBody(files[i]); body.cardType = cardType;
           var out = await api(gen, { method:'POST', body: JSON.stringify(body) });
-          if (out.res.status === 401){ signOut(); return; }
+          if (out.res.status === 401){ btn.disabled = false; $('genBusy').classList.remove('on'); signOut(); return; }
           if (out.res.ok && out.data.ok){ allCards = allCards.concat(out.data.cards || []); if (out.data.summary) summaries.push(out.data.summary); }
           else if (out.data.code === 'ai_limit' || out.data.code === 'needs_pro' || out.data.code === 'quota'){ btn.disabled = false; $('genBusy').classList.remove('on'); handleAiCode(out.data.code, out.data.error); return; }
           else { summaries.push(files[i].name + ': ' + (out.data.error || 'could not generate')); }

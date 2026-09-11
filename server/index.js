@@ -649,7 +649,8 @@ app.post('/api/decks/:id/generate', requireUser, async (req, res) => {
 
   // Confirm the deck is the caller's before spending an AI call on it.
   const { data: deck, error: deckErr } = await req.db.from('decks').select('id').eq('id', deckId).maybeSingle();
-  if (deckErr || !deck) return res.status(404).json({ ok: false, error: 'Deck not found.' });
+  if (deckErr) return res.status(500).json({ ok: false, error: 'Could not verify the deck. Please try again.' });
+  if (!deck) return res.status(404).json({ ok: false, error: 'Deck not found.' });
 
   let userContent, sourceKind, filename, charCount;
   try {
@@ -712,7 +713,8 @@ app.post('/api/decks/:id/generate', requireUser, async (req, res) => {
 app.post('/api/decks/:id/cards', requireUser, async (req, res) => {
   const deckId = req.params.id;
   const { data: deck, error: deckErr } = await req.db.from('decks').select('id').eq('id', deckId).maybeSingle();
-  if (deckErr || !deck) return res.status(404).json({ ok: false, error: 'Deck not found.' });
+  if (deckErr) return res.status(500).json({ ok: false, error: 'Could not verify the deck. Please try again.' });
+  if (!deck) return res.status(404).json({ ok: false, error: 'Deck not found.' });
 
   const incoming = Array.isArray(req.body?.cards) ? req.body.cards : [];
   const rows = incoming
@@ -832,7 +834,8 @@ app.post('/api/cards/:id/factcheck', requireUser, async (req, res) => {
   const gate = await aiGate(req);
   if (gate) return res.status(gate.status).json(gate.body);
   const { data: card, error } = await req.db.from('cards').select('front, back').eq('id', req.params.id).maybeSingle();
-  if (error || !card) return res.status(404).json({ ok: false, error: 'Card not found.' });
+  if (error) return res.status(500).json({ ok: false, error: 'Could not verify the card. Please try again.' });
+  if (!card) return res.status(404).json({ ok: false, error: 'Card not found.' });
 
   let result;
   try {

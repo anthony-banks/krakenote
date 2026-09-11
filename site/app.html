@@ -610,7 +610,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       <div class="acct-body">
         <div class="acct-row"><span class="acct-label">Signed in as</span><span id="acctEmail">—</span></div>
         <div class="acct-row"><span class="acct-label">Plan</span><span id="acctPlan">Free</span></div>
-        <button class="btn btn-primary hidden" id="acctUpgradeBtn" type="button" style="margin-top:10px">Request AI access</button>
+        <button class="btn btn-primary hidden" id="acctUpgradeBtn" type="button" style="margin-top:10px">Upgrade to Pro</button>
         <div class="acct-sep"></div>
         <h3 class="acct-h">Your name</h3>
         <input type="text" id="acctFirst" placeholder="First name" autocomplete="given-name" />
@@ -1219,14 +1219,17 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   // ── Fact-check (verify against general knowledge; opposite of strict generation) ──
   var factCardId = null, factSuggestion = null;
   async function factCheckCard(card){
-    if (!isPro()){ openUpgrade('Fact-check'); return; }
     factCardId = card.id; factSuggestion = null;
     $('factApply').classList.add('hidden');
     $('factBody').innerHTML = '<span class="spinner"></span> Checking this card against general knowledge…';
     $('factModal').classList.remove('hidden');
     var out = await api('/api/cards/' + encodeURIComponent(card.id) + '/factcheck', { method:'POST', body: '{}' });
     if (out.res.status === 401){ signOut(); return; }
-    if (!out.res.ok || !out.data.ok){ $('factBody').textContent = out.data.error || 'Fact-check failed.'; return; }
+    if (!out.res.ok || !out.data.ok){
+      if (out.data.code === 'ai_limit' || out.data.code === 'needs_pro' || out.data.code === 'free_limit'){ $('factModal').classList.add('hidden'); openUpgrade('Fact-check'); return; }
+      if (out.data.code === 'quota'){ $('factModal').classList.add('hidden'); toast('err', out.data.error || 'Daily AI limit reached.'); return; }
+      $('factBody').textContent = out.data.error || 'Fact-check failed.'; return;
+    }
     var d = out.data;
     var html = '<p><b>' + (d.accurate ? '✅ Looks accurate' : '⚠️ May need a correction') + '</b></p><p>' + escapeHtml(d.context) + '</p>';
     if (d.hasSuggestion && (d.suggestedFront !== card.front || d.suggestedBack !== card.back)){
@@ -1535,7 +1538,6 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   }
 
   async function generate(){
-    if (!isPro()){ openUpgrade('AI card generation'); return; }
     var text = ($('genText').value || '').trim();
     var url = ($('genUrl').value || '').trim();
     var files = (droppedFiles && droppedFiles.length) ? droppedFiles.slice() : Array.prototype.slice.call(($('genFile').files) || []);
@@ -1566,6 +1568,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
           var out = await api(gen, { method:'POST', body: JSON.stringify(body) });
           if (out.res.status === 401){ signOut(); return; }
           if (out.res.ok && out.data.ok){ allCards = allCards.concat(out.data.cards || []); if (out.data.summary) summaries.push(out.data.summary); }
+          else if (out.data.code === 'ai_limit' || out.data.code === 'needs_pro'){ btn.disabled = false; $('genBusy').classList.remove('on'); openUpgrade('AI generation'); return; }
           else { summaries.push(files[i].name + ': ' + (out.data.error || 'could not generate')); }
         }
         srcMeta = { kind: files.length > 1 ? 'file' : fileKind(files[0]), filename: files.length > 1 ? files.length + ' files' : files[0].name, summary: summaries.join('  •  ') };
@@ -1574,7 +1577,11 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
         var body1 = url ? { url: url } : { text: text }; body1.cardType = cardType;
         var out1 = await api(gen, { method:'POST', body: JSON.stringify(body1) });
         if (out1.res.status === 401){ signOut(); return; }
-        if (!out1.res.ok || !out1.data.ok){ btn.disabled = false; $('genBusy').classList.remove('on'); msgOn('genMsg', 'err', out1.data.error || 'Generation failed.'); return; }
+        if (!out1.res.ok || !out1.data.ok){
+          btn.disabled = false; $('genBusy').classList.remove('on');
+          if (out1.data.code === 'ai_limit' || out1.data.code === 'needs_pro'){ openUpgrade('AI generation'); return; }
+          msgOn('genMsg', 'err', out1.data.error || 'Generation failed.'); return;
+        }
         allCards = out1.data.cards || []; if (out1.data.summary) summaries.push(out1.data.summary);
         srcMeta = out1.data.source || {}; srcMeta.summary = out1.data.summary || '';
       }
@@ -2228,7 +2235,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   }
   function reflectPlan(){
     var ab = $('acctUpgradeBtn'); if (ab) ab.classList.toggle('hidden', currentPlan === 'pro');
-    var ap = $('acctPlan'); if (ap) ap.textContent = currentPlan === 'pro' ? 'Pro — AI unlocked' : 'Free — manual study';
+    var ap = $('acctPlan'); if (ap) ap.textContent = currentPlan === 'pro' ? 'Pro — unlimited, smarter AI' : 'Free — 5 AI generations/day';
   }
   function planBtn(which, title, price, sub){
     var b = document.createElement('button');
@@ -2265,8 +2272,8 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     else { b.textContent = 'Request access'; b.disabled = false; }
   }
   function openUpgrade(feature){
-    var pitch = (feature ? '<b>' + feature + '</b> is part of Krakenote Pro. ' : "You've hit a free-plan limit. ") +
-      'Unlock AI generation, fact-check, and higher limits with Pro.';
+    var pitch = (feature ? '<b>' + feature + '</b> is a Krakenote Pro feature. ' : "You've used your free AI for today. ") +
+      'Pro gives you unlimited, smarter AI — flashcards, quizzes, and fact-check.';
     if (rcPackages && (rcPackages.monthly || rcPackages.annual)){
       // Real checkout (RevenueCat + Stripe).
       $('upgradeBody').innerHTML = '<p style="margin:0 0 12px">' + pitch + '</p><div class="upg-plans"></div>';
@@ -2303,9 +2310,9 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       if (out.data.email){ currentUserEmail = out.data.email; $('acctEmail').textContent = out.data.email; }
       currentPlan = out.data.plan || 'free';
       accessRequested = !!out.data.accessRequested;
-      $('acctPlan').textContent = currentPlan === 'pro' ? 'Pro — AI unlocked' : 'Free — manual study';
+      $('acctPlan').textContent = currentPlan === 'pro' ? 'Pro — unlimited, smarter AI' : 'Free — 5 AI generations/day';
       $('acctUpgradeBtn').classList.toggle('hidden', currentPlan === 'pro');
-      $('acctUpgradeBtn').textContent = accessRequested ? 'Access requested ✓' : 'Request AI access';
+      $('acctUpgradeBtn').textContent = accessRequested ? 'Access requested ✓' : 'Upgrade to Pro';
     }
   }
   async function saveName(){

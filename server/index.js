@@ -262,41 +262,50 @@ async function requireUser(req, res, next) {
   return next();
 }
 
-// Freemium: free tier = manual study loop, no AI. 'pro' unlocks AI + higher caps.
-const FREE_DECKS = 2;
-const FREE_CARDS = 50;
+// Freemium (v1): storage is cheap, so notes, notebooks, decks and cards are
+// UNLIMITED on every plan. The paid wall is on AI — the real marginal cost.
+// Free gets a small daily AI allowance on a cheaper model (Haiku); Pro gets a
+// high daily cap on the best model. New premium features should gate on Pro.
 async function getPlan(db, userId) {
   const { data } = await db.from('profiles').select('plan').eq('id', userId).maybeSingle();
   return (data && data.plan) || 'free';
 }
 
-// AI cost controls (protect against a Pro/compromised account looping paid Claude
-// calls). Two layers: a per-user burst limit (in-memory) and a durable rolling
-// 24h quota (DB-backed, survives deploys/replicas). Both tunable via env.
+// AI cost controls (protect against a compromised/farmed account looping paid
+// Claude calls). Two layers: a per-user burst limit (in-memory) and a durable
+// rolling-24h quota (DB-backed, survives deploys/replicas). Free runs on Haiku
+// with a low daily cap; Pro runs on the best model with a high soft cap. Free's
+// cheap model is what makes account-farming economically pointless. All env-tunable.
 const AI_BURST_PER_MIN = Number(process.env.AI_BURST_PER_MIN || 8);
-const AI_DAILY_LIMIT = Number(process.env.AI_DAILY_LIMIT || 50);
-async function aiQuotaLeft(db) {
+const AI_DAILY_LIMIT = Number(process.env.AI_DAILY_LIMIT || 100);     // Pro soft cap
+const FREE_AI_DAILY = Number(process.env.FREE_AI_DAILY || 5);         // Free daily allowance
+const AI_MODEL_FREE = process.env.ANTHROPIC_MODEL_FREE || 'claude-haiku-4-5';
+async function aiUsedLast24h(db) {
   const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
   // RLS scopes ai_usage to the caller, so the count is already per-user.
   const { count } = await db.from('ai_usage').select('id', { count: 'exact', head: true }).gte('created_at', since);
-  return AI_DAILY_LIMIT - (count || 0);
+  return count || 0;
 }
 function recordAiUsage(db, userId, kind) {
   return db.from('ai_usage').insert({ user_id: userId, kind })
     .then(({ error }) => { if (error) console.error('[ai_usage] log failed:', error.message); });
 }
-// Shared gate for the paid AI endpoints: Pro plan + burst limit + daily quota.
-// Returns a response-ending object when blocked, or null to proceed.
+// Shared gate for the AI endpoints. Enforces the burst + daily limit and selects
+// the model for the caller's plan (exposed as req.aiModel). Returns a
+// response-ending object when blocked, or null to proceed.
 async function aiGate(req) {
-  if ((await getPlan(req.db, req.user.id)) !== 'pro') {
-    return { status: 403, body: { ok: false, error: 'AI is a Pro feature — request access to unlock it.', code: 'needs_pro' } };
-  }
+  const isPro = (await getPlan(req.db, req.user.id)) === 'pro';
   if (rateLimited('ai:' + req.user.id, AI_BURST_PER_MIN)) {
     return { status: 429, body: { ok: false, error: 'You are generating too fast — give it a moment and try again.' } };
   }
-  if ((await aiQuotaLeft(req.db)) <= 0) {
-    return { status: 429, body: { ok: false, error: 'Daily AI limit reached (' + AI_DAILY_LIMIT + '). It resets on a rolling 24-hour basis.', code: 'quota' } };
+  const limit = isPro ? AI_DAILY_LIMIT : FREE_AI_DAILY;
+  if ((await aiUsedLast24h(req.db)) >= limit) {
+    if (isPro) {
+      return { status: 429, body: { ok: false, error: 'Daily AI limit reached (' + limit + '). It resets on a rolling 24-hour basis.', code: 'quota' } };
+    }
+    return { status: 403, body: { ok: false, error: 'You’ve used your ' + FREE_AI_DAILY + ' free AI generations for today. Upgrade to Pro for unlimited, smarter AI.', code: 'ai_limit' } };
   }
+  req.aiModel = isPro ? AI_MODEL : AI_MODEL_FREE;
   return null;
 }
 
@@ -330,13 +339,7 @@ app.post('/api/decks', requireUser, async (req, res) => {
   if (!title) return res.status(400).json({ ok: false, error: 'A deck title is required.' });
   if (title.length > 120) return res.status(400).json({ ok: false, error: 'Title is too long (max 120 characters).' });
 
-  if ((await getPlan(req.db, req.user.id)) !== 'pro') {
-    const { count } = await req.db.from('decks').select('id', { count: 'exact', head: true });
-    if ((count || 0) >= FREE_DECKS) {
-      return res.status(403).json({ ok: false, error: 'The free plan is limited to ' + FREE_DECKS + ' decks — request access for unlimited.', code: 'free_limit' });
-    }
-  }
-
+  // Decks are cheap storage — unlimited on every plan (the AI wall is metered).
   const { data, error } = await req.db
     .from('decks')
     .insert({ user_id: req.user.id, title, subject: subject || null })
@@ -657,7 +660,7 @@ app.post('/api/decks/:id/generate', requireUser, async (req, res) => {
   let result;
   try {
     const msg = await anthropic.messages.create({
-      model: AI_MODEL,
+      model: req.aiModel || AI_MODEL,
       max_tokens: 16000,
       system: GEN_SYSTEM + typeInstr,
       output_config: { format: { type: 'json_schema', schema: CARD_SCHEMA }, effort: 'low' },
@@ -717,12 +720,7 @@ app.post('/api/decks/:id/cards', requireUser, async (req, res) => {
 
   if (!rows.length) return res.status(400).json({ ok: false, error: 'No cards to add.' });
 
-  if ((await getPlan(req.db, req.user.id)) !== 'pro') {
-    const { count } = await req.db.from('cards').select('id', { count: 'exact', head: true });
-    if ((count || 0) + rows.length > FREE_CARDS) {
-      return res.status(403).json({ ok: false, error: 'The free plan is limited to ' + FREE_CARDS + ' cards — request access for unlimited.', code: 'free_limit' });
-    }
-  }
+  // Cards are cheap storage — unlimited on every plan (the AI wall is metered).
 
   // Record the source these cards came from (summary + metadata; no raw text kept for alpha).
   const src = req.body?.source;
@@ -831,7 +829,7 @@ app.post('/api/cards/:id/factcheck', requireUser, async (req, res) => {
   let result;
   try {
     const msg = await anthropic.messages.create({
-      model: AI_MODEL,
+      model: req.aiModel || AI_MODEL,
       max_tokens: 2000,
       system: FACTCHECK_SYSTEM,
       output_config: { format: { type: 'json_schema', schema: FACTCHECK_SCHEMA }, effort: 'low' },

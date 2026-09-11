@@ -1006,7 +1006,8 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     show('appView');
     await loadPlan();
     renderView('home'); // loads real stats via /api/stats
-    setupBilling(session.user && session.user.id); // fire-and-forget; enables checkout
+    currentUserId = (session.user && session.user.id) || '';
+    setupBilling(); // fire-and-forget; enables checkout
   }
 
   // ── Decks: talk to the RLS-protected API as the signed-in user ──
@@ -1226,8 +1227,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     var out = await api('/api/cards/' + encodeURIComponent(card.id) + '/factcheck', { method:'POST', body: '{}' });
     if (out.res.status === 401){ signOut(); return; }
     if (!out.res.ok || !out.data.ok){
-      if (out.data.code === 'ai_limit' || out.data.code === 'needs_pro' || out.data.code === 'free_limit'){ $('factModal').classList.add('hidden'); openUpgrade('Fact-check'); return; }
-      if (out.data.code === 'quota'){ $('factModal').classList.add('hidden'); toast('err', out.data.error || 'Daily AI limit reached.'); return; }
+      if (out.data.code === 'ai_limit' || out.data.code === 'needs_pro' || out.data.code === 'quota'){ $('factModal').classList.add('hidden'); handleAiCode(out.data.code, out.data.error); return; }
       $('factBody').textContent = out.data.error || 'Fact-check failed.'; return;
     }
     var d = out.data;
@@ -1568,7 +1568,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
           var out = await api(gen, { method:'POST', body: JSON.stringify(body) });
           if (out.res.status === 401){ signOut(); return; }
           if (out.res.ok && out.data.ok){ allCards = allCards.concat(out.data.cards || []); if (out.data.summary) summaries.push(out.data.summary); }
-          else if (out.data.code === 'ai_limit' || out.data.code === 'needs_pro'){ btn.disabled = false; $('genBusy').classList.remove('on'); openUpgrade('AI generation'); return; }
+          else if (out.data.code === 'ai_limit' || out.data.code === 'needs_pro' || out.data.code === 'quota'){ btn.disabled = false; $('genBusy').classList.remove('on'); handleAiCode(out.data.code, out.data.error); return; }
           else { summaries.push(files[i].name + ': ' + (out.data.error || 'could not generate')); }
         }
         srcMeta = { kind: files.length > 1 ? 'file' : fileKind(files[0]), filename: files.length > 1 ? files.length + ' files' : files[0].name, summary: summaries.join('  •  ') };
@@ -1579,7 +1579,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
         if (out1.res.status === 401){ signOut(); return; }
         if (!out1.res.ok || !out1.data.ok){
           btn.disabled = false; $('genBusy').classList.remove('on');
-          if (out1.data.code === 'ai_limit' || out1.data.code === 'needs_pro'){ openUpgrade('AI generation'); return; }
+          if (handleAiCode(out1.data.code, out1.data.error)){ return; }
           msgOn('genMsg', 'err', out1.data.error || 'Generation failed.'); return;
         }
         allCards = out1.data.cards || []; if (out1.data.summary) summaries.push(out1.data.summary);
@@ -2034,7 +2034,10 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   // HTML on load so they render in the rich editor (and get saved as HTML next).
   function ntBodyToHtml(stored){
     if (!stored) return '';
-    if (/<(b|strong|i|em|u|ul|ol|li|h[1-3]|p|div|br|a|span)\b/i.test(stored)) return stored; // already HTML
+    // Already HTML — sanitize on load too, not just on save: a body written by
+    // the mobile app or a direct API call never passed through the save-time
+    // sanitizer, so trusting it here would be stored-XSS on open.
+    if (/<(b|strong|i|em|u|ul|ol|li|h[1-3]|p|div|br|a|span)\b/i.test(stored)) return ntSanitize(stored);
     return ntMarkdown(stored); // markdown/plain → HTML
   }
   // Keep only a safe subset of tags/attrs from the contenteditable output.
@@ -2222,16 +2225,24 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   // makes openUpgrade() fall back to the request-access flow). We identify the
   // RevenueCat customer as the Supabase user id so the webhook's app_user_id
   // matches profiles.id. Products live in the 'web' offering (iOS uses 'default').
-  var rcWebKey = '', rcConfigured = false, rcPackages = null, RCPurchases = null;
-  async function setupBilling(userId){
-    if (!rcWebKey || !userId || rcPackages) return;
-    try {
-      if (!RCPurchases){ var mod = await import('/vendor/purchases-js.js'); RCPurchases = mod.Purchases; }
-      if (!rcConfigured){ RCPurchases.configure({ apiKey: rcWebKey, appUserId: userId }); rcConfigured = true; }
-      var offerings = await RCPurchases.getSharedInstance().getOfferings();
-      var web = offerings && offerings.all && offerings.all['web'];
-      rcPackages = web ? { monthly: web.monthly || null, annual: web.annual || null } : null;
-    } catch (e){ rcPackages = null; } // billing optional — fall back to request-access
+  var rcWebKey = '', currentUserId = '', rcConfigured = false, rcPackages = null, rcSetupInFlight = null, RCPurchases = null;
+  // Load the web-billing 'web' offering. Idempotent + awaitable: cached once
+  // loaded, retried on failure (doesn't latch on a transient error), and
+  // concurrent callers share a single in-flight attempt.
+  function setupBilling(){
+    if (!rcWebKey || !currentUserId || rcPackages) return Promise.resolve();
+    if (rcSetupInFlight) return rcSetupInFlight;
+    rcSetupInFlight = (async function(){
+      try {
+        if (!RCPurchases){ var mod = await import('/vendor/purchases-js.js'); RCPurchases = mod.Purchases; }
+        if (!rcConfigured){ RCPurchases.configure({ apiKey: rcWebKey, appUserId: currentUserId }); rcConfigured = true; }
+        var offerings = await RCPurchases.getSharedInstance().getOfferings();
+        var web = offerings && offerings.all && offerings.all['web'];
+        rcPackages = web ? { monthly: web.monthly || null, annual: web.annual || null } : null;
+      } catch (e){ rcPackages = null; } // billing optional — fall back to request-access
+    })();
+    rcSetupInFlight.finally(function(){ rcSetupInFlight = null; });
+    return rcSetupInFlight;
   }
   function reflectPlan(){
     var ab = $('acctUpgradeBtn'); if (ab) ab.classList.toggle('hidden', currentPlan === 'pro');
@@ -2247,9 +2258,14 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     b.addEventListener('click', function(){ startPurchase(which); });
     return b;
   }
+  var rcPurchasing = false;
   async function startPurchase(which){
+    if (rcPurchasing) return; // guard against double-clicks / concurrent checkouts
     var pkg = rcPackages && (which === 'annual' ? rcPackages.annual : rcPackages.monthly);
     if (!pkg || !RCPurchases) return;
+    rcPurchasing = true;
+    var planBtns = $('upgradeBody').querySelectorAll('.upg-plan');
+    planBtns.forEach(function(b){ b.disabled = true; });
     $('upgradeMsg').textContent = 'Opening secure checkout…';
     try {
       var result = await RCPurchases.getSharedInstance().purchase({ rcPackage: pkg });
@@ -2262,8 +2278,11 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       // The webhook writes profiles.plan server-side; reconcile a moment later.
       setTimeout(function(){ loadPlan().then(reflectPlan); }, 2500);
     } catch (e){
-      if (e && (e.errorCode === 'UserCancelledError' || /cancel/i.test(e.message || ''))){ $('upgradeMsg').textContent = ''; return; }
-      $('upgradeMsg').textContent = (e && e.message) || 'Checkout could not be completed. Please try again.';
+      if (e && (e.errorCode === 'UserCancelledError' || /cancel/i.test(e.message || ''))){ $('upgradeMsg').textContent = ''; }
+      else { $('upgradeMsg').textContent = (e && e.message) || 'Checkout could not be completed. Please try again.'; }
+    } finally {
+      rcPurchasing = false;
+      planBtns.forEach(function(b){ b.disabled = false; });
     }
   }
   function updateUpgradeBtn(){
@@ -2271,7 +2290,17 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     if (accessRequested){ b.textContent = 'Access requested ✓'; b.disabled = true; }
     else { b.textContent = 'Request access'; b.disabled = false; }
   }
-  function openUpgrade(feature){
+  // Handle an AI-endpoint limit response. Returns true if it handled the code.
+  // ai_limit = free daily cap reached (not a Pro-only feature) -> generic upgrade;
+  // needs_pro = genuinely Pro-only -> feature-named upgrade; quota = Pro daily cap.
+  function handleAiCode(code, error){
+    if (code === 'ai_limit'){ openUpgrade(null); return true; }
+    if (code === 'needs_pro'){ openUpgrade('AI generation'); return true; }
+    if (code === 'quota'){ toast('err', error || 'Daily AI limit reached. It resets on a rolling 24-hour basis.'); return true; }
+    return false;
+  }
+  async function openUpgrade(feature){
+    await setupBilling(); // ensure the 'web' offering is loaded before choosing checkout vs. fallback
     var pitch = (feature ? '<b>' + feature + '</b> is a Krakenote Pro feature. ' : "You've used your free AI for today. ") +
       'Pro gives you unlimited, smarter AI — flashcards, quizzes, and fact-check.';
     if (rcPackages && (rcPackages.monthly || rcPackages.annual)){

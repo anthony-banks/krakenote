@@ -8,6 +8,7 @@ import { fsrs, generatorParameters, Rating } from 'ts-fsrs';
 import { extractFromHtml } from '@extractus/article-extractor';
 import { YoutubeTranscript } from 'youtube-transcript';
 import dns from 'node:dns/promises';
+import crypto from 'node:crypto';
 import net from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -283,7 +284,8 @@ const AI_MODEL_FREE = process.env.ANTHROPIC_MODEL_FREE || 'claude-haiku-4-5';
 async function aiUsedLast24h(db) {
   const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
   // RLS scopes ai_usage to the caller, so the count is already per-user.
-  const { count } = await db.from('ai_usage').select('id', { count: 'exact', head: true }).gte('created_at', since);
+  const { count, error } = await db.from('ai_usage').select('id', { count: 'exact', head: true }).gte('created_at', since);
+  if (error) throw error; // fail closed — never let a count error silently disable the cap
   return count || 0;
 }
 function recordAiUsage(db, userId, kind) {
@@ -299,7 +301,10 @@ async function aiGate(req) {
     return { status: 429, body: { ok: false, error: 'You are generating too fast — give it a moment and try again.' } };
   }
   const limit = isPro ? AI_DAILY_LIMIT : FREE_AI_DAILY;
-  if ((await aiUsedLast24h(req.db)) >= limit) {
+  let used;
+  try { used = await aiUsedLast24h(req.db); }
+  catch (e) { return { status: 503, body: { ok: false, error: 'Could not verify your usage right now — please try again.' } }; }
+  if (used >= limit) {
     if (isPro) {
       return { status: 429, body: { ok: false, error: 'Daily AI limit reached (' + limit + '). It resets on a rolling 24-hour basis.', code: 'quota' } };
     }
@@ -1212,7 +1217,10 @@ const RC_REVOKE = new Set(['EXPIRATION']);
 app.post('/api/rc/webhook', async (req, res) => {
   if (!REVENUECAT_WEBHOOK_SECRET) return res.status(503).json({ ok: false });
   const auth = (req.headers.authorization || '').toString();
-  if (auth !== 'Bearer ' + REVENUECAT_WEBHOOK_SECRET) {
+  // Constant-time compare so the shared secret can't be recovered via timing.
+  const expected = 'Bearer ' + REVENUECAT_WEBHOOK_SECRET;
+  const a = Buffer.from(auth), b = Buffer.from(expected);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
     return res.status(401).json({ ok: false });
   }
   if (!supabase) return res.status(503).json({ ok: false });

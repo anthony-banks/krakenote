@@ -306,6 +306,9 @@ async function aiGate(req) {
     return { status: 403, body: { ok: false, error: 'You’ve used your ' + FREE_AI_DAILY + ' free AI generations for today. Upgrade to Pro for unlimited, smarter AI.', code: 'ai_limit' } };
   }
   req.aiModel = isPro ? AI_MODEL : AI_MODEL_FREE;
+  // The structured-output 'effort' param is supported on the Pro model but NOT on
+  // Haiku 4.5, which 400s if it's sent. So only apply it for Pro.
+  req.aiEffort = isPro ? 'low' : null;
   return null;
 }
 
@@ -663,7 +666,7 @@ app.post('/api/decks/:id/generate', requireUser, async (req, res) => {
       model: req.aiModel || AI_MODEL,
       max_tokens: 16000,
       system: GEN_SYSTEM + typeInstr,
-      output_config: { format: { type: 'json_schema', schema: CARD_SCHEMA }, effort: 'low' },
+      output_config: { format: { type: 'json_schema', schema: CARD_SCHEMA }, ...(req.aiEffort ? { effort: req.aiEffort } : {}) },
       messages: [{ role: 'user', content: userContent }],
     });
     if (msg.stop_reason === 'refusal') {
@@ -832,7 +835,7 @@ app.post('/api/cards/:id/factcheck', requireUser, async (req, res) => {
       model: req.aiModel || AI_MODEL,
       max_tokens: 2000,
       system: FACTCHECK_SYSTEM,
-      output_config: { format: { type: 'json_schema', schema: FACTCHECK_SCHEMA }, effort: 'low' },
+      output_config: { format: { type: 'json_schema', schema: FACTCHECK_SCHEMA }, ...(req.aiEffort ? { effort: req.aiEffort } : {}) },
       messages: [{ role: 'user', content: [{ type: 'text', text: 'Question (front): ' + card.front + '\nAnswer (back): ' + card.back }] }],
     });
     if (msg.stop_reason === 'refusal') return res.status(422).json({ ok: false, error: 'The AI declined to check this card.' });

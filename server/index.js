@@ -60,6 +60,10 @@ const REVENUECAT_WEB_KEY = process.env.REVENUECAT_WEB_KEY || '';
 // webhook. Set this per deployment (staging=SANDBOX, prod=PRODUCTION) so a test
 // purchase never mutates the other environment's data. Unset = process all.
 const RC_WEBHOOK_ENVIRONMENT = (process.env.RC_WEBHOOK_ENVIRONMENT || '').toUpperCase();
+// Which deployment this is, for analytics attribution. Derived from
+// RC_WEBHOOK_ENVIRONMENT (already set per environment: staging=SANDBOX, prod=PRODUCTION).
+const APP_ENV = RC_WEBHOOK_ENVIRONMENT === 'PRODUCTION' ? 'production'
+  : RC_WEBHOOK_ENVIRONMENT === 'SANDBOX' ? 'staging' : 'unknown';
 
 const app = express();
 
@@ -183,6 +187,36 @@ app.get('/api/config', (_req, res) => {
     // the client falls back to the "request access" flow in that case.
     revenuecatWebKey: REVENUECAT_WEB_KEY,
   });
+});
+
+// POST /api/track { name, props?, platform? } — product analytics (KRA-97).
+// Fire-and-forget: responds 204 immediately, then records the event. Attribution
+// decodes the bearer JWT's `sub` (analytics is low-stakes, so no verify round-trip
+// per event). Keep props free of PII — no note/card content. Written only here via
+// the service role; the events table has no client RLS policies.
+app.post('/api/track', (req, res) => {
+  res.status(204).end();
+  try {
+    if (!supabase) return;
+    const ip = clientIp(req);
+    if (rateLimited('track:' + ip, 120)) return; // basic anti-spam, per minute
+    const name = typeof req.body?.name === 'string' ? req.body.name.trim().slice(0, 80) : '';
+    if (!name) return;
+    let props = (req.body && typeof req.body.props === 'object' && !Array.isArray(req.body.props)) ? req.body.props : {};
+    try { if (JSON.stringify(props).length > 4000) props = {}; } catch { props = {}; }
+    const platform = typeof req.body?.platform === 'string' ? req.body.platform.slice(0, 20) : null;
+    let userId = null;
+    const m = (req.headers.authorization || '').toString().match(/^Bearer\s+(.+)$/);
+    if (m) {
+      try {
+        const payload = JSON.parse(Buffer.from(m[1].split('.')[1], 'base64').toString('utf8'));
+        if (payload && typeof payload.sub === 'string') userId = payload.sub;
+      } catch { /* unparseable token — record as anonymous */ }
+    }
+    supabase.from('events')
+      .insert({ user_id: userId, name, props, platform, app_env: APP_ENV })
+      .then(({ error }) => { if (error) console.warn('[track] insert failed:', error.message); });
+  } catch (e) { /* analytics must never break a request */ }
 });
 
 // POST /api/auth/signup { email, password }

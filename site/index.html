@@ -370,6 +370,9 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   }
   wire('wl','ok','email','err');
   wire('wl2','ok2','email2','err2');
+  // Top-of-funnel analytics (KRA-98): a single anonymous landing view. Fire-and-forget.
+  try { fetch('/api/track', { method:'POST', headers:{'Content-Type':'application/json'}, keepalive:true,
+    body: JSON.stringify({ name:'landing_view', platform:'web', props:{ path: location.pathname, ref: document.referrer ? new URL(document.referrer).hostname : '' } }) }).catch(function(){}); } catch(e){}
 </script>
 </body>
 </html>

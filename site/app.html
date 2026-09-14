@@ -1012,6 +1012,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     greet(session.user);
     show('appView');
     await loadPlan();
+    track('session_start', { plan: currentPlan });
     renderView('home'); // loads real stats via /api/stats
     currentUserId = (session.user && session.user.id) || '';
     setupBilling(); // fire-and-forget; enables checkout
@@ -1042,6 +1043,19 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       // never hang with a permanently-disabled button — res.ok is false, status 0.
       return { res: { ok: false, status: 0 }, data: { ok: false, error: 'Network error — check your connection and try again.' } };
     }
+  }
+
+  // Fire-and-forget product analytics (KRA-98). Never blocks a flow or throws.
+  // Attributed server-side to the signed-in user via the token. Keep props PII-free.
+  function track(name, props){
+    try {
+      var payload = JSON.stringify({ name: name, props: props || {}, platform: 'web' });
+      accessToken().then(function(t){
+        var h = { 'Content-Type': 'application/json' };
+        if (t) h['Authorization'] = 'Bearer ' + t;
+        fetch('/api/track', { method: 'POST', headers: h, body: payload, keepalive: true }).catch(function(){});
+      }).catch(function(){});
+    } catch (e){ /* analytics must never break the app */ }
   }
 
   function setDecksState(emoji, title, body){
@@ -1133,6 +1147,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     }
     $('deckTitle').value = ''; $('deckSubject').value = '';
     hideDeckForm();
+    track('deck_created');
     openDeck(out.data.deck); // land on the new deck's capture/upload screen
   }
 
@@ -1243,6 +1258,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   // ── Fact-check (verify against general knowledge; opposite of strict generation) ──
   var factCardId = null, factSuggestion = null;
   async function factCheckCard(card){
+    track('factcheck_used');
     factCardId = card.id; factSuggestion = null;
     $('factApply').classList.add('hidden');
     $('factBody').innerHTML = '<span class="spinner"></span> Checking this card against general knowledge…';
@@ -1610,6 +1626,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       }
       btn.disabled = false; $('genBusy').classList.remove('on');
       if (!allCards.length){ msgOn('genMsg', 'err', 'Could not make cards from that. Try adding more material.'); return; }
+      track('ai_generation', { source: files.length ? 'file' : (url ? 'url' : 'text'), card_count: allCards.length, plan: currentPlan });
       if (summaries.length){ var s = $('genSummary'); s.classList.remove('hidden'); s.textContent = 'Summary — ' + summaries.join('  •  '); }
       proposedSource = srcMeta;
       (sigs || []).forEach(function(s){ if (s) sigSeen[s] = true; }); // remember for the dup guard
@@ -2036,6 +2053,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     var out = await api('/api/notes', { method:'POST', body: JSON.stringify({ title:'', body:'', notebookId: notebookId }) });
     if (out.res.status === 401){ signOut(); return; }
     if (!out.res.ok || !out.data.ok){ return; }
+    track('note_created');
     ntCurrent = out.data.note;
     $('ntTitle').value = ''; $('ntBody').innerHTML = ''; $('ntSave').textContent = 'Saved';
     var mv = $('ntMove'); if (mv) mv.value = ntCurrent.notebook_id || '';
@@ -2299,6 +2317,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     var pkg = rcPackages && (which === 'annual' ? rcPackages.annual : rcPackages.monthly);
     if (!pkg || !RCPurchases) return;
     rcPurchasing = true;
+    track('upgrade_started', { plan: which });
     var planBtns = $('upgradeBody').querySelectorAll('.upg-plan');
     planBtns.forEach(function(b){ b.disabled = true; });
     $('upgradeMsg').textContent = 'Opening secure checkout…';
@@ -2308,6 +2327,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       if (active && active['krakenote_pro']) currentPlan = 'pro';
       $('upgradeMsg').textContent = '';
       $('upgradeModal').classList.add('hidden');
+      track('upgrade_completed', { plan: which });
       toast('ok', 'Welcome to Krakenote Pro! 🎉');
       reflectPlan();
       // The webhook writes profiles.plan server-side; reconcile a moment later.
@@ -2329,13 +2349,14 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   // ai_limit = free daily cap reached (not a Pro-only feature) -> generic upgrade;
   // needs_pro = genuinely Pro-only -> feature-named upgrade; quota = Pro daily cap.
   function handleAiCode(code, error){
-    if (code === 'ai_limit'){ openUpgrade(null); return true; }
+    if (code === 'ai_limit'){ track('ai_limit_hit'); openUpgrade(null); return true; }
     if (code === 'needs_pro'){ openUpgrade('AI generation'); return true; }
     if (code === 'quota'){ toast('err', error || 'Daily AI limit reached. It resets on a rolling 24-hour basis.'); return true; }
     return false;
   }
   async function openUpgrade(feature){
     await setupBilling(); // ensure the 'web' offering is loaded before choosing checkout vs. fallback
+    track('paywall_shown', { feature: feature || null });
     var pitch = (feature ? '<b>' + feature + '</b> is a Krakenote Pro feature. ' : "You've used your free AI for today. ") +
       'Pro gives you unlimited, smarter AI — flashcards, quizzes, and fact-check.';
     if (rcPackages && (rcPackages.monthly || rcPackages.annual)){
@@ -2565,6 +2586,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
           btn.disabled = false;
           return;
         }
+        track('signed_up', { method: 'email' });
         $('pw').value = '';
         btn.disabled = false;
         if (su.data && su.data.session){
@@ -2594,6 +2616,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       }
       $('pw').value = '';
       btn.disabled = false;
+      track('logged_in', { method: 'email' });
       onSignedIn(out.data.session);
     } catch (ex){
       btn.disabled = false;

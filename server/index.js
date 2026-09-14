@@ -1487,6 +1487,18 @@ app.post('/api/admin/users/:id/plan', requireSuperuser, async (req, res) => {
   return res.json({ ok: true, plan });
 });
 
+// Product-analytics summary for the admin dashboard (KRA-96). Aggregated in
+// Postgres via the service-role-only analytics_summary() function.
+app.get('/api/admin/analytics', requireSuperuser, async (req, res) => {
+  const days = Math.min(365, Math.max(1, parseInt(req.query.days, 10) || 30));
+  const { data, error } = await supabase.rpc('analytics_summary', { days });
+  if (error) {
+    console.error('[admin] analytics failed:', error.message);
+    return res.status(500).json({ ok: false, error: 'Could not load analytics.' });
+  }
+  return res.json({ ok: true, ...(data || {}) });
+});
+
 // Brand icons, served straight from brand/ so there is no duplicated copy to
 // drift. Rendered as CSS masks in the UI, since the source SVGs are a fixed navy.
 app.use('/icons', express.static(join(__dirname, '..', 'brand', 'icons'), { maxAge: '7d' }));

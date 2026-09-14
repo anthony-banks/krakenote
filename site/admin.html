@@ -100,6 +100,28 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   .foot-actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
   .linkbtn{background:transparent;color:var(--muted);border:1px solid var(--border);padding:11px 18px;border-radius:14px;font-family:var(--head);font-weight:600;font-size:14px;cursor:pointer}
   .linkbtn:hover{color:var(--accent);border-color:var(--accent)}
+
+  /* Analytics dashboard */
+  .an-two{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:24px}
+  @media(max-width:720px){.an-two{grid-template-columns:1fr}}
+  .an-funnel{padding:20px 22px;display:flex;flex-direction:column;gap:13px}
+  .an-stage-top{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:6px;font-size:14px}
+  .an-stage-top b{font-family:var(--head);font-weight:700}
+  .an-stage-top .pct{color:var(--muted);font-size:12.5px;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .an-bar{height:26px;border-radius:8px;background:var(--surface-2);overflow:hidden}
+  .an-bar > i{display:block;height:100%;border-radius:8px;background:linear-gradient(90deg,var(--cta),var(--accent));transition:width .4s ease}
+  .an-trend{padding:20px 22px}
+  .an-trend .bars{display:flex;align-items:flex-end;gap:3px;height:120px}
+  .an-trend .bars > i{flex:1;min-width:2px;background:linear-gradient(180deg,var(--accent),var(--cta));border-radius:3px 3px 0 0;opacity:.85}
+  .an-trend .bars > i:hover{opacity:1}
+  .an-trend .xlab{display:flex;justify-content:space-between;color:var(--muted);font-size:11px;margin-top:8px;font-variant-numeric:tabular-nums}
+  .an-plat{padding:16px 22px;display:flex;flex-direction:column;gap:12px}
+  .an-plat .row{display:flex;align-items:center;gap:12px;font-size:14px}
+  .an-plat .row .nm{width:66px;text-transform:capitalize;font-weight:600}
+  .an-plat .row .track{flex:1;height:14px;border-radius:7px;background:var(--surface-2);overflow:hidden}
+  .an-plat .row .track > i{display:block;height:100%;background:var(--accent)}
+  .an-plat .row .ct{width:56px;text-align:right;color:var(--muted);font-variant-numeric:tabular-nums}
+  #anEvents td:last-child,#anEvents th:last-child{text-align:right;font-variant-numeric:tabular-nums}
 </style>
 </head>
 <body>
@@ -135,6 +157,43 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
 <main id="dashView" class="hidden">
   <div class="wrap">
     <div class="head-row">
+      <h1>Analytics</h1>
+      <div class="foot-actions">
+        <select id="anDays" class="linkbtn" style="padding:10px 14px">
+          <option value="7">Last 7 days</option>
+          <option value="30" selected>Last 30 days</option>
+          <option value="90">Last 90 days</option>
+        </select>
+        <button id="anRefresh" class="linkbtn" type="button">↻ Refresh</button>
+      </div>
+    </div>
+    <div class="cards">
+      <div class="card"><div class="label">Active users</div><div class="big" id="anUsers">—</div><div class="hint">with any event</div></div>
+      <div class="card"><div class="label">Signups</div><div class="big" id="anSignups">—</div><div class="hint">new accounts</div></div>
+      <div class="card"><div class="label">AI generations</div><div class="big" id="anGen">—</div><div class="hint">flashcards / quizzes</div></div>
+      <div class="card"><div class="label">Upgrades</div><div class="big" id="anUpgrades">—</div><div class="hint">completed purchases</div></div>
+      <div class="card"><div class="label">Hit AI limit</div><div class="big" id="anLimit">—</div><div class="hint">free cap reached · upsell signal</div></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h2>Conversion funnel</h2></div>
+      <div id="anFunnel" class="an-funnel"><p style="color:var(--muted)">Loading…</p></div>
+    </div>
+    <div class="panel" style="margin-top:24px">
+      <div class="panel-head"><h2>Daily activity</h2><span class="hint" style="margin:0">total events / day</span></div>
+      <div id="anTrend" class="an-trend"></div>
+    </div>
+    <div class="an-two">
+      <div class="panel">
+        <div class="panel-head"><h2>By platform</h2></div>
+        <div id="anPlatform" class="an-plat"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2>All events</h2></div>
+        <div class="table-scroll"><table><thead><tr><th>Event</th><th>Count</th></tr></thead><tbody id="anEvents"></tbody></table></div>
+      </div>
+    </div>
+
+    <div class="head-row" style="margin-top:48px">
       <h1>Waitlist</h1>
       <div class="foot-actions">
         <button id="refreshBtn" class="linkbtn" type="button">↻ Refresh</button>
@@ -321,6 +380,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   async function loadData(){
     if (!getToken()){ showLogin(); return; }
     showDash();
+    loadAnalytics();
     loadUsers();
     setState('🐙', 'Loading…', 'Fetching waitlist signups.');
     try {
@@ -360,7 +420,60 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     }
   }
 
+  // ── Analytics ──
+  function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+  function pctOf(n, d){ return d > 0 ? Math.round(n / d * 100) + '%' : '0%'; }
+  async function loadAnalytics(){
+    if (!getToken()) return;
+    var days = $('anDays').value || '30';
+    try {
+      var res = await fetch('/api/admin/analytics?days=' + encodeURIComponent(days), { headers: authHeaders(), cache: 'no-store' });
+      if (res.status === 401){ clearToken(); showLogin('Session expired. Sign in again.'); return; }
+      if (!res.ok){ $('anFunnel').innerHTML = '<p style="color:var(--muted)">Could not load analytics (HTTP ' + res.status + ').</p>'; return; }
+      renderAnalytics(await res.json());
+    } catch (ex){ $('anFunnel').innerHTML = '<p style="color:var(--muted)">Network error loading analytics.</p>'; }
+  }
+  function renderAnalytics(d){
+    var f = d.funnel || {}, by = d.by_name || {}, plat = d.by_platform || {};
+    $('anUsers').textContent = (d.unique_users || 0).toLocaleString();
+    $('anSignups').textContent = (f.signed_up || 0).toLocaleString();
+    $('anGen').textContent = (by.ai_generation || 0).toLocaleString();
+    $('anUpgrades').textContent = (f.upgrade_completed || 0).toLocaleString();
+    $('anLimit').textContent = (f.ai_limit_hit || 0).toLocaleString();
+
+    var stages = [
+      { k: 'Active users', v: f.active_users || 0 },
+      { k: 'Used AI', v: f.activated_users || 0 },
+      { k: 'Saw paywall', v: f.paywall_shown || 0 },
+      { k: 'Started upgrade', v: f.upgrade_started || 0 },
+      { k: 'Upgraded', v: f.upgrade_completed || 0 }
+    ];
+    var top = stages[0].v || 1;
+    $('anFunnel').innerHTML = stages.map(function(s, i){
+      var w = Math.max(Math.round((s.v / top) * 100), 2);
+      var conv = i === 0 ? '' : ' · ' + pctOf(s.v, stages[0].v) + ' of active';
+      return '<div><div class="an-stage-top"><b>' + esc(s.k) + '</b><span class="pct">' + s.v.toLocaleString() + conv + '</span></div><div class="an-bar"><i style="width:' + w + '%"></i></div></div>';
+    }).join('');
+
+    var daily = d.daily || [];
+    var max = daily.reduce(function(m, x){ return Math.max(m, x.total || 0); }, 1);
+    if (daily.length){
+      var bars = daily.map(function(x){ var h = Math.max(Math.round((x.total / max) * 100), 2); return '<i style="height:' + h + '%" title="' + esc(x.day) + ': ' + (x.total||0) + ' events (' + (x.ai_generation||0) + ' AI, ' + (x.signed_up||0) + ' signups)"></i>'; }).join('');
+      $('anTrend').innerHTML = '<div class="bars">' + bars + '</div><div class="xlab"><span>' + esc(daily[0].day) + '</span><span>' + esc(daily[daily.length-1].day) + '</span></div>';
+    } else {
+      $('anTrend').innerHTML = '<p style="color:var(--muted)">No events in this range yet.</p>';
+    }
+
+    var pk = Object.keys(plat), pmax = pk.reduce(function(m, k){ return Math.max(m, plat[k]); }, 1);
+    $('anPlatform').innerHTML = pk.length ? pk.map(function(k){ var w = Math.round(plat[k] / pmax * 100); return '<div class="row"><span class="nm">' + esc(k) + '</span><span class="track"><i style="width:' + w + '%"></i></span><span class="ct">' + plat[k].toLocaleString() + '</span></div>'; }).join('') : '<p style="color:var(--muted)">No data.</p>';
+
+    var names = Object.keys(by).sort(function(a, b){ return by[b] - by[a]; });
+    $('anEvents').innerHTML = names.length ? names.map(function(n){ return '<tr><td>' + esc(n) + '</td><td>' + by[n].toLocaleString() + '</td></tr>'; }).join('') : '<tr><td colspan="2" style="color:var(--muted)">No events yet.</td></tr>';
+  }
+
   // Wire up
+  $('anRefresh').addEventListener('click', loadAnalytics);
+  $('anDays').addEventListener('change', loadAnalytics);
   $('loginForm').addEventListener('submit', async function(e){
     e.preventDefault();
     var email = ($('em').value || '').trim();

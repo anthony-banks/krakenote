@@ -443,10 +443,10 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
 
     var stages = [
       { k: 'Active users', v: f.active_users || 0 },
-      { k: 'Used AI', v: f.activated_users || 0 },
-      { k: 'Saw paywall', v: f.paywall_shown || 0 },
-      { k: 'Started upgrade', v: f.upgrade_started || 0 },
-      { k: 'Upgraded', v: f.upgrade_completed || 0 }
+      { k: 'Used AI', v: f.used_ai_users || 0 },
+      { k: 'Saw paywall', v: f.paywall_users || 0 },
+      { k: 'Started upgrade', v: f.upgrade_started_users || 0 },
+      { k: 'Upgraded', v: f.upgraded_users || 0 }
     ];
     var top = stages[0].v || 1;
     $('anFunnel').innerHTML = stages.map(function(s, i){

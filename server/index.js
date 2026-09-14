@@ -1335,6 +1335,20 @@ app.post('/api/rc/webhook', async (req, res) => {
   if (ev.store) patch.subscription_store = String(ev.store).toLowerCase();
   if (ev.expiration_at_ms) patch.current_period_end = new Date(Number(ev.expiration_at_ms)).toISOString();
 
+  // Idempotency + ordering guard (KRA-92): RevenueCat can redeliver events or
+  // deliver them out of order. Only apply an event NEWER than the last one we
+  // processed for this user — so a stale/late EXPIRATION can't undo a newer
+  // RENEWAL (downgrading a paying customer), and duplicate deliveries are no-ops.
+  const evAtMs = Number(ev.event_timestamp_ms) || Date.now();
+  const { data: cur, error: curErr } = await supabase
+    .from('profiles').select('subscription_event_at').eq('id', userId).maybeSingle();
+  if (curErr) { console.error('[rc] read failed:', curErr.message); return res.status(500).json({ ok: false }); }
+  if (cur && cur.subscription_event_at && evAtMs <= Date.parse(cur.subscription_event_at)) {
+    console.log('[rc] skip stale/duplicate', type, 'for', userId);
+    return res.json({ ok: true });
+  }
+  patch.subscription_event_at = new Date(evAtMs).toISOString();
+
   // Service-role client: this is a trusted server-to-server call (no user JWT).
   const { error } = await supabase.from('profiles').upsert({ id: userId, ...patch }, { onConflict: 'id' });
   if (error) {

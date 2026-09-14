@@ -164,8 +164,12 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   .deck-row:hover{background:color-mix(in srgb,var(--accent) 7%,transparent)}
   .deck-title{font-family:var(--head);font-weight:700;font-size:16px}
   .deck-meta{font-size:13px;color:var(--muted);margin-top:2px}
-  .deck-row .linkbtn{margin-left:auto}
   .deck-row .deck-main{cursor:pointer;flex:1;min-width:0}
+  /* deck-main flex:1 pushes the action cluster (pin + Delete) to the right — no auto-margins to fight the grow. */
+  .deckpin{flex:none;border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:16px;line-height:1;padding:4px 7px;border-radius:8px;transition:.12s}
+  .deckpin.on,.deckpin:hover,.deckpin:focus-visible{color:#f5b301}
+  .deckpin:hover{background:color-mix(in srgb,#f5b301 12%,transparent)}
+  .deckpin:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
   /* Deck detail: generate form + cards */
   .gen-form{padding:18px 22px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:12px}
@@ -481,7 +485,10 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       .ntx{position:absolute;top:8px;right:8px;border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:12px;line-height:1;padding:3px 5px;border-radius:7px;opacity:0;transition:opacity .12s ease}
       .nt-item:hover .ntx,.nt-item:focus-within .ntx,.ntx:focus-visible{opacity:1}
       .ntx:hover,.ntx:focus-visible{color:var(--danger);background:color-mix(in srgb,var(--danger) 12%,transparent)}
-      .nt-item .t{font-family:var(--head);font-weight:600;font-size:14.5px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:18px}
+      .ntpin{position:absolute;top:8px;right:30px;border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:13px;line-height:1;padding:3px 4px;border-radius:7px;opacity:0;transition:opacity .12s ease}
+      .nt-item:hover .ntpin,.nt-item:focus-within .ntpin,.ntpin:focus-visible,.ntpin.on{opacity:1}
+      .ntpin.on,.ntpin:hover,.ntpin:focus-visible{color:#f5b301}
+      .nt-item .t{font-family:var(--head);font-weight:600;font-size:14.5px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:46px}
       .nt-item .s{font-size:12.5px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
       .nt-item .d{font-size:11px;color:var(--muted);margin-top:4px}
       .nt-main{flex:1;display:flex;flex-direction:column;gap:12px;min-width:0;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:22px 24px}
@@ -1088,11 +1095,21 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       var n = d.cardCount || 0;
       meta.textContent = (d.subject ? d.subject + ' · ' : '') + n + ' card' + (n === 1 ? '' : 's');
       main.appendChild(t); main.appendChild(meta);
+      var pin = document.createElement('button'); pin.className = 'deckpin' + (d.pinned ? ' on' : ''); pin.type = 'button';
+      pin.textContent = d.pinned ? '★' : '☆';
+      pin.title = d.pinned ? 'Unpin' : 'Pin to top'; pin.setAttribute('aria-label', pin.title + ' ' + d.title);
+      pin.addEventListener('click', function(e){ e.stopPropagation(); toggleDeckPin(d); });
       var del = document.createElement('button'); del.className = 'linkbtn'; del.type = 'button'; del.textContent = 'Delete';
       del.addEventListener('click', function(){ deleteDeck(d); });
-      row.appendChild(main); row.appendChild(del);
+      row.appendChild(main); row.appendChild(pin); row.appendChild(del);
       list.appendChild(row);
     });
+  }
+  async function toggleDeckPin(d){
+    var out = await api('/api/decks/' + encodeURIComponent(d.id), { method:'PATCH', body: JSON.stringify({ pinned: !d.pinned }) });
+    if (out.res.status === 401){ signOut(); return; }
+    if (out.res.ok && out.data.ok){ loadDecks(); }
+    else { toast('err', 'Could not update the pin.'); }
   }
 
   function showDeckForm(){ $('deckForm').classList.remove('hidden'); $('deckTitle').focus(); }
@@ -1974,6 +1991,11 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       var s = document.createElement('div'); s.className = 's'; s.textContent = n.snippet || 'No additional text';
       var d = document.createElement('div'); d.className = 'd'; d.textContent = fmtNoteTime(n.updated_at);
       it.appendChild(t); it.appendChild(s); it.appendChild(d);
+      var pin = document.createElement('button'); pin.className = 'ntpin' + (n.pinned ? ' on' : ''); pin.type = 'button';
+      pin.textContent = n.pinned ? '★' : '☆';
+      pin.title = n.pinned ? 'Unpin' : 'Pin to top'; pin.setAttribute('aria-label', pin.title + ' ' + (n.title || 'Untitled'));
+      pin.addEventListener('click', function(e){ e.stopPropagation(); toggleNotePin(n); });
+      it.appendChild(pin);
       var x = document.createElement('button'); x.className = 'ntx'; x.type = 'button'; x.textContent = '✕';
       x.title = 'Delete note'; x.setAttribute('aria-label', 'Delete note ' + (n.title || 'Untitled'));
       x.addEventListener('click', function(e){ e.stopPropagation(); deleteNoteById(n.id, n.title); });
@@ -1982,6 +2004,13 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       it.addEventListener('keydown', function(e){ if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); openNote(n.id); } });
       wrap.appendChild(it);
     });
+  }
+
+  async function toggleNotePin(n){
+    var out = await api('/api/notes/' + encodeURIComponent(n.id), { method:'PATCH', body: JSON.stringify({ pinned: !n.pinned }) });
+    if (out.res.status === 401){ signOut(); return; }
+    if (out.res.ok && out.data.ok){ loadNoteList(); }
+    else { toast('err', 'Could not update the pin.'); }
   }
 
   function showNoteEditor(show){

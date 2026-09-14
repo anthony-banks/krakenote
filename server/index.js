@@ -321,7 +321,8 @@ async function aiGate(req) {
 app.get('/api/decks', requireUser, async (req, res) => {
   const { data, error } = await req.db
     .from('decks')
-    .select('id, title, subject, created_at, cards(count)')
+    .select('id, title, subject, created_at, pinned, cards(count)')
+    .order('pinned', { ascending: false })
     .order('created_at', { ascending: false });
 
   if (error) {
@@ -334,9 +335,23 @@ app.get('/api/decks', requireUser, async (req, res) => {
     title: d.title,
     subject: d.subject,
     created_at: d.created_at,
+    pinned: !!d.pinned,
     cardCount: Array.isArray(d.cards) && d.cards[0] ? d.cards[0].count : 0,
   }));
   return res.json({ ok: true, decks });
+});
+
+// Update a deck (currently just the pin flag). RLS scopes this to the owner.
+app.patch('/api/decks/:id', requireUser, async (req, res) => {
+  const patch = {};
+  if (typeof req.body?.pinned === 'boolean') patch.pinned = req.body.pinned;
+  if (!Object.keys(patch).length) return res.status(400).json({ ok: false, error: 'Nothing to update.' });
+  const { error } = await req.db.from('decks').update(patch).eq('id', req.params.id);
+  if (error) {
+    console.error('[decks] update failed:', error.message);
+    return res.status(500).json({ ok: false, error: 'Could not update the deck.' });
+  }
+  return res.json({ ok: true });
 });
 
 // Create a deck owned by the caller. user_id is set server-side and the RLS
@@ -1118,7 +1133,8 @@ app.delete('/api/notebooks/:id', requireUser, async (req, res) => {
 app.get('/api/notes', requireUser, async (req, res) => {
   let q = req.db
     .from('notes')
-    .select('id, notebook_id, title, body, updated_at')
+    .select('id, notebook_id, title, body, updated_at, pinned')
+    .order('pinned', { ascending: false })
     .order('updated_at', { ascending: false })
     .limit(500);
   const nb = req.query.notebookId;
@@ -1142,6 +1158,7 @@ app.get('/api/notes', requireUser, async (req, res) => {
     // Body may be HTML (rich editor) or plain/markdown — strip tags for the snippet.
     snippet: (n.body || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 140),
     updated_at: n.updated_at,
+    pinned: !!n.pinned,
   }));
   return res.json({ ok: true, notes });
 });
@@ -1187,6 +1204,7 @@ app.patch('/api/notes/:id', requireUser, async (req, res) => {
   if ('notebookId' in (req.body || {})) {
     patch.notebook_id = typeof req.body.notebookId === 'string' && req.body.notebookId ? req.body.notebookId : null;
   }
+  if (typeof req.body?.pinned === 'boolean') patch.pinned = req.body.pinned;
   const { error } = await req.db.from('notes').update(patch).eq('id', req.params.id);
   if (error) {
     console.error('[notes] update failed:', error.message);

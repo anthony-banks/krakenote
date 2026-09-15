@@ -939,8 +939,20 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     setMsg(null, '');
   }
 
+  // Auth lives at real URLs: /login and /signup. authModeFromPath() reads the mode
+  // from the address bar; goAuth() switches mode and records a history entry so the
+  // toggle and browser back/forward stay in sync. (A logged-out visit to /app or
+  // /app/* keeps its URL so the deep link survives the round-trip through login.)
+  function authPathFor(m){ return m === 'signup' ? '/signup' : '/login'; }
+  function authModeFromPath(){ return (location.pathname || '').replace(/\/+$/, '') === '/signup' ? 'signup' : 'signin'; }
+  function goAuth(m){
+    setMode(m);
+    var url = authPathFor(m);
+    if (location.pathname !== url) history.pushState({ auth: m }, '', url);
+  }
+
   $('switchBtn').addEventListener('click', function(){
-    setMode(mode === 'signup' ? 'signin' : 'signup');
+    goAuth(mode === 'signup' ? 'signin' : 'signup');
   });
 
   // ── Dashboard section copy. Everything is an honest empty state: there is no
@@ -1020,10 +1032,11 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       $('sidebar').classList.remove('open');
     });
   });
-  // Browser back/forward — render the view the URL now points at (no new entry).
+  // Browser back/forward — re-sync to the URL (no new entry). In the app, render
+  // the addressed view; on the auth screen, switch between /login and /signup.
   window.addEventListener('popstate', function(){
-    if ($('appView').classList.contains('hidden')) return; // still on the auth screen
-    renderView(viewFromPath());
+    if (!$('appView').classList.contains('hidden')){ renderView(viewFromPath()); return; }
+    if (!$('authView').classList.contains('hidden')){ setMode(authModeFromPath()); }
   });
 
   // ── Auth flow ──
@@ -2555,6 +2568,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   async function signOut(){
     try { if (sb) await sb.auth.signOut(); } catch(e){}
     setMode('signin');
+    if (location.pathname !== '/login') history.replaceState({ auth: 'signin' }, '', '/login');
     $('pw').value = '';
     show('authView');
     setMsg('ok', 'You have been signed out.');
@@ -2787,7 +2801,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     if (sess.data && sess.data.session){
       onSignedIn(sess.data.session);
     } else {
-      setMode('signin');
+      setMode(authModeFromPath()); // /signup shows the create-account form, else sign-in
       show('authView');
     }
 

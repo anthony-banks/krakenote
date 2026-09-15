@@ -57,6 +57,11 @@ const REVENUECAT_WEBHOOK_SECRET = process.env.REVENUECAT_WEBHOOK_SECRET;
 // served via /api/config so staging can use a sandbox key (Stripe test mode) and
 // prod a live key, without hard-coding either in the client.
 const REVENUECAT_WEB_KEY = process.env.REVENUECAT_WEB_KEY || '';
+// Google Ads conversion tracking (KRA-107). Both are public client-side values
+// (the AW-… conversion id and the per-action label), served via /api/config so
+// they can differ per environment and stay empty (→ tag never loads) until set.
+const GOOGLE_ADS_ID = process.env.GOOGLE_ADS_ID || '';
+const GOOGLE_ADS_SIGNUP_LABEL = process.env.GOOGLE_ADS_SIGNUP_LABEL || '';
 // RevenueCat fires every event (sandbox AND production) to every configured
 // webhook. Set this per deployment (staging=SANDBOX, prod=PRODUCTION) so a test
 // purchase never mutates the other environment's data. Unset = process all.
@@ -187,6 +192,9 @@ app.get('/api/config', (_req, res) => {
     // Empty string when web billing isn't configured for this environment yet;
     // the client falls back to the "request access" flow in that case.
     revenuecatWebKey: REVENUECAT_WEB_KEY,
+    // Empty until Google Ads is wired for this environment; the tag stays unloaded.
+    googleAdsId: GOOGLE_ADS_ID,
+    googleAdsSignupLabel: GOOGLE_ADS_SIGNUP_LABEL,
   });
 });
 

@@ -277,7 +277,7 @@ app.post('/api/auth/signup', async (req, res) => {
 // has its own URL (/app/notes, /app/decks, …); all serve the same shell, and the
 // client routes to the right view from the path (assets are absolute, so nesting
 // one level deep is safe).
-app.get(['/app', '/app/:view'], (_req, res) => res.sendFile(join(SITE_DIR, 'app.html')));
+app.get(['/app', '/app/:view', '/login', '/signup'], (_req, res) => res.sendFile(join(SITE_DIR, 'app.html')));
 
 // ── User data API (RLS-enforced) ────────────────────────────────────────────
 // Each request runs AS the signed-in user: we verify their Supabase JWT, then

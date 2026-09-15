@@ -1087,6 +1087,26 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     } catch (e){ /* analytics must never break the app */ }
   }
 
+  // ── Google Ads conversion tracking (KRA-107) ──
+  // Config-gated: with no id from /api/config the tag never loads. Loading gtag
+  // with the AW-… id here reads the gclid first-party cookie set on the landing
+  // page (same domain), so a signup here is attributed to the ad click.
+  var gAdsId = '', gAdsSignupLabel = '';
+  function loadGoogleAds(){
+    if (!gAdsId || window.gtag) return;
+    var s = document.createElement('script'); s.async = true;
+    s.src = 'https://www.googletagmanager.com/gtag/js?id=' + encodeURIComponent(gAdsId);
+    document.head.appendChild(s);
+    window.dataLayer = window.dataLayer || [];
+    window.gtag = function(){ window.dataLayer.push(arguments); };
+    window.gtag('js', new Date());
+    window.gtag('config', gAdsId);
+  }
+  function adsSignupConversion(){
+    try { if (gAdsId && gAdsSignupLabel && window.gtag) window.gtag('event', 'conversion', { send_to: gAdsId + '/' + gAdsSignupLabel }); }
+    catch (e){ /* never break signup */ }
+  }
+
   function setDecksState(emoji, title, body){
     var s = $('decksState');
     s.classList.remove('hidden');
@@ -2699,6 +2719,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
           return;
         }
         track('signed_up', { method: 'email' });
+        adsSignupConversion(); // count the account creation as a Google Ads conversion
         $('pw').value = '';
         btn.disabled = false;
         if (su.data && su.data.session){
@@ -2744,6 +2765,8 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       cfg = await r.json().catch(function(){ return {}; });
       if (!r.ok || !cfg.ok) throw new Error(cfg.error || 'not configured');
       rcWebKey = cfg.revenuecatWebKey || '';
+      gAdsId = cfg.googleAdsId || ''; gAdsSignupLabel = cfg.googleAdsSignupLabel || '';
+      loadGoogleAds();
     } catch (ex){
       show('authView');
       $('authForm').classList.add('hidden');

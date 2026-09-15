@@ -373,6 +373,20 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   // Top-of-funnel analytics (KRA-98): a single anonymous landing view. Fire-and-forget.
   try { fetch('/api/track', { method:'POST', headers:{'Content-Type':'application/json'}, keepalive:true,
     body: JSON.stringify({ name:'landing_view', platform:'web', props:{ path: location.pathname, ref: document.referrer ? new URL(document.referrer).hostname : '' } }) }).catch(function(){}); } catch(e){}
+
+  // Google Ads tag (KRA-107): load the AW-… tag here so an ad click's gclid is
+  // captured in a first-party cookie. The signup conversion itself fires in the
+  // app (/app) — same domain, so the cookie carries over. Config-gated: no id → skip.
+  try { fetch('/api/config', { cache:'no-store' }).then(function(r){ return r.json(); }).then(function(cfg){
+    var id = cfg && cfg.googleAdsId; if (!id || window.gtag) return;
+    var s = document.createElement('script'); s.async = true;
+    s.src = 'https://www.googletagmanager.com/gtag/js?id=' + encodeURIComponent(id);
+    document.head.appendChild(s);
+    window.dataLayer = window.dataLayer || [];
+    window.gtag = function(){ window.dataLayer.push(arguments); };
+    window.gtag('js', new Date());
+    window.gtag('config', id);
+  }).catch(function(){}); } catch(e){}
 </script>
 </body>
 </html>

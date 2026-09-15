@@ -323,33 +323,51 @@ async function aiUsedLast24h(db) {
   if (error) throw error; // fail closed — never let a count error silently disable the cap
   return count || 0;
 }
-function recordAiUsage(db, userId, kind) {
-  return db.from('ai_usage').insert({ user_id: userId, kind })
-    .then(({ error }) => { if (error) console.error('[ai_usage] log failed:', error.message); });
+function overLimitResponse(isPro, limit) {
+  if (isPro) return { status: 429, body: { ok: false, error: 'Daily AI limit reached (' + limit + '). It resets on a rolling 24-hour basis.', code: 'quota' } };
+  return { status: 403, body: { ok: false, error: 'You’ve used your ' + FREE_AI_DAILY + ' free AI generations for today. Upgrade to Pro for unlimited, smarter AI.', code: 'ai_limit' } };
 }
-// Shared gate for the AI endpoints. Enforces the burst + daily limit and selects
-// the model for the caller's plan (exposed as req.aiModel). Returns a
-// response-ending object when blocked, or null to proceed.
+// Gate for the AI endpoints: burst limit, plan → model selection, and a best-effort
+// fast-fail over-limit check (so an already-capped user doesn't do ingest work).
+// The AUTHORITATIVE reservation is consumeAi() — called atomically right before
+// the paid Claude call. Returns a response object when blocked, or null to proceed
+// (with req.aiPro/aiLimit/aiModel/aiEffort set).
 async function aiGate(req) {
   const isPro = (await getPlan(req.db, req.user.id)) === 'pro';
   if (rateLimited('ai:' + req.user.id, AI_BURST_PER_MIN)) {
     return { status: 429, body: { ok: false, error: 'You are generating too fast — give it a moment and try again.' } };
   }
-  const limit = isPro ? AI_DAILY_LIMIT : FREE_AI_DAILY;
+  req.aiPro = isPro;
+  req.aiLimit = isPro ? AI_DAILY_LIMIT : FREE_AI_DAILY;
+  req.aiModel = isPro ? AI_MODEL : AI_MODEL_FREE;
+  // 'effort' is supported on the Pro model but NOT Haiku 4.5 (it 400s), so Pro only.
+  req.aiEffort = isPro ? 'low' : null;
   let used;
   try { used = await aiUsedLast24h(req.db); }
-  catch (e) { return { status: 503, body: { ok: false, error: 'Could not verify your usage right now — please try again.' } }; }
-  if (used >= limit) {
-    if (isPro) {
-      return { status: 429, body: { ok: false, error: 'Daily AI limit reached (' + limit + '). It resets on a rolling 24-hour basis.', code: 'quota' } };
-    }
-    return { status: 403, body: { ok: false, error: 'You’ve used your ' + FREE_AI_DAILY + ' free AI generations for today. Upgrade to Pro for unlimited, smarter AI.', code: 'ai_limit' } };
-  }
-  req.aiModel = isPro ? AI_MODEL : AI_MODEL_FREE;
-  // The structured-output 'effort' param is supported on the Pro model but NOT on
-  // Haiku 4.5, which 400s if it's sent. So only apply it for Pro.
-  req.aiEffort = isPro ? 'low' : null;
+  catch { return { status: 503, body: { ok: false, error: 'Could not verify your usage right now — please try again.' } }; }
+  if (used >= req.aiLimit) return overLimitResponse(isPro, req.aiLimit);
   return null;
+}
+// Atomically reserve one slot under the daily cap right before the paid call —
+// closes the TOCTOU where parallel requests all cleared a stale pre-insert count
+// (and a burst > the cap slipped through). ai_try_consume takes a per-user
+// advisory lock in Postgres. Service-role client (the function is server-only).
+// Returns null to proceed (sets req.aiUsageId for a possible refund), else a
+// response object.
+async function consumeAi(req, kind) {
+  const { data, error } = await supabase.rpc('ai_try_consume', { p_user: req.user.id, p_limit: req.aiLimit, p_kind: kind });
+  if (error) { console.error('[ai] consume failed:', error.message); return { status: 503, body: { ok: false, error: 'Could not verify your usage right now — please try again.' } }; }
+  if (!data || !data.allowed) return overLimitResponse(req.aiPro, req.aiLimit);
+  req.aiUsageId = data.id;
+  return null;
+}
+// Refund the reserved slot if the paid call ultimately failed — don't charge a
+// user's daily allowance for our error. Best-effort service-role delete.
+async function refundAi(req) {
+  if (!req.aiUsageId) return;
+  try { await supabase.from('ai_usage').delete().eq('id', req.aiUsageId); }
+  catch (e) { console.warn('[ai] refund failed:', e?.message || e); }
+  req.aiUsageId = null;
 }
 
 // List the caller's decks, newest first, each with its card count.
@@ -716,6 +734,10 @@ app.post('/api/decks/:id/generate', requireUser, async (req, res) => {
     : ct === 'cloze' ? ' Produce ONLY cloze fill-in-the-blank cards.'
     : ' Produce a mix of basic and cloze cards — aim for roughly one-third cloze.';
 
+  // Reserve a slot atomically right before spending the paid call.
+  const consume = await consumeAi(req, 'generate');
+  if (consume) return res.status(consume.status).json(consume.body);
+
   let result;
   try {
     const msg = await anthropic.messages.create({
@@ -732,6 +754,7 @@ app.post('/api/decks/:id/generate', requireUser, async (req, res) => {
     result = JSON.parse(block?.text || '{}');
   } catch (ex) {
     console.error('[generate] AI call failed:', ex?.message);
+    await refundAi(req); // the call failed — give the slot back
     return res.status(502).json({ ok: false, error: 'AI generation failed. Please try again.' });
   }
 
@@ -748,8 +771,7 @@ app.post('/api/decks/:id/generate', requireUser, async (req, res) => {
     }))
     .filter((c) => c.front && c.back);
 
-  await recordAiUsage(req.db, req.user.id, 'generate'); // count the paid call against the quota
-
+  // Usage was already recorded atomically by consumeAi() before the call.
   return res.json({
     ok: true,
     summary,
@@ -887,6 +909,10 @@ app.post('/api/cards/:id/factcheck', requireUser, async (req, res) => {
   if (error) return res.status(500).json({ ok: false, error: 'Could not verify the card. Please try again.' });
   if (!card) return res.status(404).json({ ok: false, error: 'Card not found.' });
 
+  // Reserve a slot atomically right before spending the paid call.
+  const consume = await consumeAi(req, 'factcheck');
+  if (consume) return res.status(consume.status).json(consume.body);
+
   let result;
   try {
     const msg = await anthropic.messages.create({
@@ -901,9 +927,10 @@ app.post('/api/cards/:id/factcheck', requireUser, async (req, res) => {
     result = JSON.parse(block?.text || '{}');
   } catch (ex) {
     console.error('[factcheck] failed:', ex?.message);
+    await refundAi(req); // the call failed — give the slot back
     return res.status(502).json({ ok: false, error: 'Fact-check failed. Please try again.' });
   }
-  await recordAiUsage(req.db, req.user.id, 'factcheck'); // count the paid call against the quota
+  // Usage was already recorded atomically by consumeAi() before the call.
   return res.json({
     ok: true,
     accurate: !!result.accurate,

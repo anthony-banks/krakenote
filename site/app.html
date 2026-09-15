@@ -292,8 +292,15 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   .acct-h{font-family:var(--head);font-weight:700;font-size:15px;margin-bottom:10px}
   .acct-body input{width:100%;font-family:var(--body);font-size:15px;padding:12px 14px;border-radius:12px;border:1.5px solid var(--border);background:var(--surface-2);color:var(--text);outline:none;margin-bottom:12px}
   .acct-body input:focus{border-color:var(--accent)}
-  .wip-card{background:var(--surface-2);border:1px solid var(--border);border-radius:14px;padding:16px}
-  .wip-badge{font-family:var(--head);font-weight:700;font-size:10px;letter-spacing:.5px;text-transform:uppercase;padding:3px 9px;border-radius:999px;background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 34%,transparent)}
+  .billing-card{background:var(--surface-2);border:1px solid var(--border);border-radius:14px;padding:16px}
+  .billing-plan{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .billing-plan strong{font-family:var(--head);font-size:15px}
+  .billing-pill{font-family:var(--head);font-weight:700;font-size:10.5px;letter-spacing:.4px;text-transform:uppercase;padding:3px 9px;border-radius:999px;border:1px solid transparent}
+  .billing-pill.ok{background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent);border-color:color-mix(in srgb,var(--accent) 34%,transparent)}
+  .billing-pill.warn{background:color-mix(in srgb,var(--danger) 14%,transparent);color:var(--danger);border-color:color-mix(in srgb,var(--danger) 32%,transparent)}
+  .billing-pill.muted{background:color-mix(in srgb,var(--muted) 14%,transparent);color:var(--muted);border-color:color-mix(in srgb,var(--muted) 30%,transparent)}
+  .billing-meta{color:var(--muted);font-size:13.5px;line-height:1.55;margin-top:9px}
+  .billing-actions{margin-top:14px;display:flex;gap:10px;flex-wrap:wrap}
   .card-row.draggable{cursor:grab}
   .card-row.drag-over{border-top:2px solid var(--accent)}
 
@@ -633,11 +640,8 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
         <div class="msg" id="acctMsg"></div>
         <button class="btn btn-primary" id="acctPwBtn" type="button">Update password</button>
         <div class="acct-sep"></div>
-        <div class="wip-card">
-          <span class="wip-badge">Coming soon</span>
-          <h3 class="acct-h" style="margin-top:10px">Billing &amp; subscription</h3>
-          <p style="color:var(--muted);font-size:14px;line-height:1.5">Krakenote Pro — unlimited AI generation, the tutor, and exam mode. Subscription management and payment will live here.</p>
-        </div>
+        <h3 class="acct-h">Billing &amp; subscription</h3>
+        <div id="billingCard" class="billing-card"></div>
         <div class="acct-sep"></div>
         <button class="linkbtn" id="acctSignout" type="button">Sign out</button>
       </div>
@@ -2263,12 +2267,16 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   // ── Account & plan ──
   var currentUserEmail = '';
   var currentPlan = 'free', accessRequested = false;
+  var subStatus = null, subStore = null, periodEnd = null; // billing detail from /api/profile
   function isPro(){ return currentPlan === 'pro'; }
   async function loadPlan(){
     var out = await api('/api/profile');
     if (out.res.ok && out.data.ok){
       currentPlan = out.data.plan || 'free';
       accessRequested = !!out.data.accessRequested;
+      subStatus = out.data.subscriptionStatus || null;
+      subStore = out.data.subscriptionStore || null;
+      periodEnd = out.data.currentPeriodEnd || null;
       if (out.data.email) currentUserEmail = out.data.email;
     }
   }
@@ -2300,6 +2308,81 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   function reflectPlan(){
     var ab = $('acctUpgradeBtn'); if (ab) ab.classList.toggle('hidden', currentPlan === 'pro');
     var ap = $('acctPlan'); if (ap) ap.textContent = currentPlan === 'pro' ? 'Pro — unlimited, smarter AI' : 'Free — 5 AI generations/day';
+    renderBilling();
+  }
+  function fmtDate(iso){
+    if (!iso) return '';
+    var d = new Date(iso); if (isNaN(d)) return '';
+    return d.toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' });
+  }
+  // Billing & subscription card on the Account page. Reads plan + status + period
+  // end from /api/profile (webhook-written) and offers a Manage button that opens
+  // RevenueCat's hosted portal (cancel / update card) via customerInfo.managementURL.
+  function renderBilling(){
+    var el = $('billingCard'); if (!el) return;
+    el.innerHTML = '';
+    if (currentPlan !== 'pro'){
+      var p = document.createElement('p');
+      p.className = 'billing-meta'; p.style.marginTop = '0';
+      p.textContent = 'You’re on the Free plan — 5 AI generations a day. Krakenote Pro unlocks unlimited, smarter AI, the tutor, and exam mode.';
+      el.appendChild(p);
+      var up = document.createElement('div'); up.className = 'billing-actions';
+      var ub = document.createElement('button');
+      ub.type = 'button'; ub.className = 'btn btn-primary';
+      ub.textContent = accessRequested ? 'Access requested ✓' : 'Upgrade to Pro';
+      ub.disabled = accessRequested;
+      ub.addEventListener('click', function(){ openUpgrade(null); });
+      up.appendChild(ub); el.appendChild(up);
+      return;
+    }
+    // Pro: status pill + renewal/expiry line.
+    var st = subStatus || 'active';
+    var pillClass = 'ok', pillText = 'Active', line = '';
+    var when = fmtDate(periodEnd);
+    if (st === 'trialing'){ pillText = 'Free trial'; pillClass = 'ok'; line = when ? ('Trial ends ' + when + ' — then $5.99/mo. Cancel anytime before then.') : 'You’re in your free trial.'; }
+    else if (st === 'canceled'){ pillText = 'Canceled'; pillClass = 'muted'; line = when ? ('Your subscription is canceled — Pro access continues until ' + when + '.') : 'Your subscription is canceled; access continues until the period ends.'; }
+    else if (st === 'billing_issue'){ pillText = 'Payment issue'; pillClass = 'warn'; line = 'There’s a problem with your payment. Update your card to keep Pro.'; }
+    else { pillText = 'Active'; pillClass = 'ok'; line = when ? ('Renews on ' + when + '.') : 'Your subscription is active.'; }
+
+    var row = document.createElement('div'); row.className = 'billing-plan';
+    var name = document.createElement('strong'); name.textContent = 'Krakenote Pro';
+    var pill = document.createElement('span'); pill.className = 'billing-pill ' + pillClass; pill.textContent = pillText;
+    row.appendChild(name); row.appendChild(pill); el.appendChild(row);
+
+    var meta = document.createElement('p'); meta.className = 'billing-meta'; meta.textContent = line; el.appendChild(meta);
+
+    var acts = document.createElement('div'); acts.className = 'billing-actions';
+    if (subStore === 'app_store' || subStore === 'play_store'){
+      // Purchased on a mobile store — managed there, not via the web portal.
+      var hint = document.createElement('p'); hint.className = 'billing-meta';
+      hint.textContent = subStore === 'app_store'
+        ? 'You subscribed on iOS — manage or cancel from your Apple account (Settings → your name → Subscriptions).'
+        : 'You subscribed on Android — manage or cancel from Google Play → Subscriptions.';
+      acts.appendChild(hint);
+    } else {
+      var mb = document.createElement('button');
+      mb.type = 'button'; mb.className = 'linkbtn';
+      mb.textContent = 'Manage subscription';
+      mb.addEventListener('click', function(){ openManageSubscription(mb); });
+      acts.appendChild(mb);
+    }
+    el.appendChild(acts);
+  }
+  // Open RevenueCat's hosted management portal (cancel / update payment). The URL
+  // is per-customer and only known via the SDK, so we configure billing then read
+  // customerInfo.managementURL. Opens in a new tab.
+  async function openManageSubscription(btn){
+    btn.disabled = true; var prev = btn.textContent; btn.textContent = 'Opening…';
+    try {
+      await setupBilling(); // imports + configures the SDK if it hasn't been yet
+      if (!RCPurchases || !rcConfigured) throw new Error('billing unavailable');
+      var ci = await RCPurchases.getSharedInstance().getCustomerInfo();
+      var url = ci && ci.managementURL;
+      if (url){ window.open(url, '_blank', 'noopener'); }
+      else { toast('err', 'No manageable subscription found. If you subscribed on a phone, manage it in that app store.'); }
+    } catch (e){
+      toast('err', 'Could not open subscription management. Please try again, or email support@krakenote.com.');
+    } finally { btn.disabled = false; btn.textContent = prev; }
   }
   function planBtn(which, title, price, sub){
     var b = document.createElement('button');
@@ -2395,9 +2478,13 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       if (out.data.email){ currentUserEmail = out.data.email; $('acctEmail').textContent = out.data.email; }
       currentPlan = out.data.plan || 'free';
       accessRequested = !!out.data.accessRequested;
+      subStatus = out.data.subscriptionStatus || null;
+      subStore = out.data.subscriptionStore || null;
+      periodEnd = out.data.currentPeriodEnd || null;
       $('acctPlan').textContent = currentPlan === 'pro' ? 'Pro — unlimited, smarter AI' : 'Free — 5 AI generations/day';
       $('acctUpgradeBtn').classList.toggle('hidden', currentPlan === 'pro');
       $('acctUpgradeBtn').textContent = accessRequested ? 'Access requested ✓' : 'Upgrade to Pro';
+      renderBilling();
     }
   }
   async function saveName(){

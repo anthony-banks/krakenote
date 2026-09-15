@@ -1075,7 +1075,7 @@ app.get('/api/stats', requireUser, async (req, res) => {
 
 // Profile (first/last name). Email comes from the verified token, not the table.
 app.get('/api/profile', requireUser, async (req, res) => {
-  const { data, error } = await req.db.from('profiles').select('first_name, last_name, plan, access_requested_at').eq('id', req.user.id).maybeSingle();
+  const { data, error } = await req.db.from('profiles').select('first_name, last_name, plan, access_requested_at, subscription_status, subscription_store, current_period_end').eq('id', req.user.id).maybeSingle();
   if (error) {
     console.error('[profile] load failed:', error.message);
     return res.status(500).json({ ok: false, error: 'Could not load your profile.' });
@@ -1087,6 +1087,9 @@ app.get('/api/profile', requireUser, async (req, res) => {
     lastName: data?.last_name || '',
     plan: data?.plan || 'free',
     accessRequested: !!data?.access_requested_at,
+    subscriptionStatus: data?.subscription_status || null,
+    subscriptionStore: data?.subscription_store || null,
+    currentPeriodEnd: data?.current_period_end || null,
   });
 });
 

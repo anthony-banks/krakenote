@@ -962,6 +962,26 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   };
   var currentView = 'home';
 
+  // ── Routing ── each view has a real URL under /app (home is bare /app) so
+  // sections are shareable, refreshable, and back/forward works. The server
+  // serves app.html for /app and /app/<view>; renderView() swaps panels and go()
+  // wraps it with a history entry.
+  var VIEW_PATH = { home:'', notes:'notes', decks:'decks', review:'review', quizzes:'quizzes', progress:'progress', account:'account', upload:'upload' };
+  function pathForView(key){ var seg = VIEW_PATH[key] || ''; return '/app' + (seg ? '/' + seg : ''); }
+  function viewFromPath(){
+    var m = (location.pathname || '').replace(/\/+$/, '').match(/^\/app(?:\/([a-z]+))?$/);
+    var seg = (m && m[1]) || '';
+    var keys = Object.keys(VIEW_PATH);
+    for (var i = 0; i < keys.length; i++){ if (VIEW_PATH[keys[i]] === seg) return keys[i]; }
+    return 'home';
+  }
+  // Navigate to a view AND record it in history (clean URL, no hash).
+  function go(key){
+    renderView(key);
+    var url = pathForView(key);
+    if (location.pathname !== url || location.hash) history.pushState({ view: key }, '', url);
+  }
+
   function setActiveNav(key){
     Array.prototype.forEach.call(document.querySelectorAll('.navlink[data-view]'), function(b){
       b.classList.toggle('active', b.getAttribute('data-view') === key);
@@ -996,13 +1016,14 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
 
   Array.prototype.forEach.call(document.querySelectorAll('.navlink[data-view]'), function(btn){
     btn.addEventListener('click', function(){
-      Array.prototype.forEach.call(document.querySelectorAll('.navlink[data-view]'), function(b){
-        b.classList.remove('active');
-      });
-      btn.classList.add('active');
-      renderView(btn.getAttribute('data-view'));
+      go(btn.getAttribute('data-view')); // renderView() also sets the active nav
       $('sidebar').classList.remove('open');
     });
+  });
+  // Browser back/forward — render the view the URL now points at (no new entry).
+  window.addEventListener('popstate', function(){
+    if ($('appView').classList.contains('hidden')) return; // still on the auth screen
+    renderView(viewFromPath());
   });
 
   // ── Auth flow ──
@@ -1017,7 +1038,11 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     show('appView');
     await loadPlan();
     track('session_start', { plan: currentPlan });
-    renderView('home'); // loads real stats via /api/stats
+    // Land on whatever section the URL names (deep-link / refresh), and normalise
+    // the address bar to its clean path — dropping any stray #hash.
+    var initial = viewFromPath();
+    history.replaceState({ view: initial }, '', pathForView(initial));
+    renderView(initial); // loads that view's data (home → real stats via /api/stats)
     currentUserId = (session.user && session.user.id) || '';
     setupBilling(); // fire-and-forget; enables checkout
   }
@@ -2571,13 +2596,13 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   });
   // Home quick-action tiles
   Array.prototype.forEach.call(document.querySelectorAll('.quick-btn[data-go]'), function(b){
-    b.addEventListener('click', function(){ renderView(b.getAttribute('data-go')); $('sidebar').classList.remove('open'); });
+    b.addEventListener('click', function(){ go(b.getAttribute('data-go')); $('sidebar').classList.remove('open'); });
   });
   // Quiz overlay
   $('quizClose').addEventListener('click', closeQuiz);
   $('quizRetry').addEventListener('click', function(){ closeQuiz(); loadQuizPicker(); });
   // Upload: new deck shortcut
-  $('uploadNewDeckBtn').addEventListener('click', function(){ renderView('decks'); showDeckForm(); });
+  $('uploadNewDeckBtn').addEventListener('click', function(){ go('decks'); showDeckForm(); });
   // Account
   $('acctPwBtn').addEventListener('click', changePassword);
   $('acctSignout').addEventListener('click', signOut);

@@ -357,7 +357,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       var act = document.createElement('td');
       var btn = document.createElement('button'); btn.type = 'button';
       if (u.plan === 'pro'){ btn.className = 'linkbtn'; btn.textContent = 'Revoke'; btn.addEventListener('click', function(){ setPlan(u.id, 'free', btn); }); }
-      else { btn.className = 'btn btn-primary'; btn.style.fontSize = '13px'; btn.style.padding = '8px 16px'; btn.textContent = 'Approve'; btn.addEventListener('click', function(){ setPlan(u.id, 'pro', btn); }); }
+      else { btn.className = 'btn btn-primary'; btn.style.fontSize = '13px'; btn.style.padding = '8px 16px'; btn.textContent = 'Make Pro'; btn.addEventListener('click', function(){ setPlan(u.id, 'pro', btn); }); }
       act.appendChild(btn);
       tr.appendChild(email); tr.appendChild(name); tr.appendChild(plan); tr.appendChild(req); tr.appendChild(act);
       tb.appendChild(tr);

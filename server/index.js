@@ -1456,10 +1456,17 @@ app.get('/api/admin/users', requireSuperuser, async (_req, res) => {
   return res.json({ ok: true, users });
 });
 
-// Admin: set a user's plan — approve (→ 'pro') or revoke (→ 'free').
+// Admin: set a user's plan — grant Pro (→ 'pro') or revoke (→ 'free'). Admin
+// grants are complimentary (no real subscription), tagged subscription_status
+// 'comped' so the account page shows "Complimentary" instead of a Manage button;
+// revoking clears it back to free.
 app.post('/api/admin/users/:id/plan', requireSuperuser, async (req, res) => {
-  const plan = req.body?.plan === 'pro' ? 'pro' : 'free';
-  const { error } = await supabase.from('profiles').upsert({ id: req.params.id, plan }, { onConflict: 'id' });
+  const pro = req.body?.plan === 'pro';
+  const plan = pro ? 'pro' : 'free';
+  const { error } = await supabase.from('profiles').upsert(
+    { id: req.params.id, plan, subscription_status: pro ? 'comped' : null },
+    { onConflict: 'id' },
+  );
   if (error) {
     console.error('[admin] set plan failed:', error.message);
     return res.status(500).json({ ok: false, error: 'Could not update the user.' });

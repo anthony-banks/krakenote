@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Krakenote — Snap your notes. Crack the exam.</title>
-<meta name="description" content="Krakenote turns any notes, textbook, slide, or PDF into instant AI flashcards, quizzes, and a tutor — then a memory-science review loop drills you on exactly what you're about to forget. Coming soon on iOS & web." />
+<meta name="description" content="Krakenote is your note-taker and AI study aid in one: take notes in clean notebooks, then turn any note, textbook, slide, or PDF into instant AI flashcards, quizzes, and a tutor — with spaced-repetition review. Free to start on iOS & web." />
 <link rel="canonical" href="https://www.krakenote.com/" />
 <meta name="theme-color" content="#26364f" />
 <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -21,7 +21,7 @@
 <!-- Twitter Card -->
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:title" content="Krakenote — Snap your notes. Crack the exam." />
-<meta name="twitter:description" content="Instant AI flashcards, quizzes, and a tutor from any notes, textbook, slide, or PDF — with a memory-science review loop. Coming soon on iOS & web." />
+<meta name="twitter:description" content="Your note-taker and AI study aid in one. Take notes, then turn them into instant AI flashcards, quizzes, and a tutor — with spaced-repetition review. Free to start on iOS & web." />
 <meta name="twitter:image" content="https://www.krakenote.com/og-image.png" />
 <!-- set theme before paint to avoid a flash -->
 <script>(function(){try{var r=document.documentElement,s=localStorage.getItem('theme'),
@@ -89,13 +89,13 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     :root:not([data-theme="dark"]) .ic-sun{display:none}
     :root:not([data-theme="dark"]) .ic-moon{display:block}
   }
-  /* Sign in as a clear outlined button (secondary to the filled Join waitlist),
+  /* Sign in as a clear outlined button (secondary to the filled Get started),
      so returning users have an obvious way in. */
   .navlinks a.signin{font-family:var(--head);font-weight:600;color:var(--accent);border:1.5px solid var(--accent);border-radius:11px;padding:8px 16px;transition:background .15s ease,color .15s ease}
   .navlinks a.signin:hover{background:var(--accent);color:#fff}
   .navlinks a{white-space:nowrap}
   @media(max-width:820px){.navlinks a:not(.btn):not(.signin){display:none}}
-  /* Small phones: tighten the header so brand + Sign in + toggle + Join waitlist
+  /* Small phones: tighten the header so brand + Sign in + toggle + Get started
      stay on one line (Sign in was wrapping to two lines and colliding). */
   @media(max-width:520px){
     .navlinks{gap:14px}
@@ -177,9 +177,27 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   .price li{padding:6px 0;color:var(--muted)}
   .price li::before{content:"✦";color:var(--accent);margin-right:10px}
 
+  /* HERO CTA + secondary (ghost) button */
+  .hero-cta{display:flex;gap:14px;flex-wrap:wrap}
+  @media(max-width:900px){.hero-cta{justify-content:center}}
+  .btn-ghost{background:transparent;color:var(--accent);border:1.5px solid var(--accent);padding:13.5px 24px}
+  .btn-ghost:hover{background:var(--accent);color:#fff;transform:translateY(-2px)}
+
+  /* NOTES + STUDY AID — 1:1 side by side */
+  .duo{display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:stretch}
+  @media(max-width:820px){.duo{grid-template-columns:1fr}}
+  .duo-card{background:var(--surface);border:1px solid var(--border);border-radius:22px;padding:34px;box-shadow:0 8px 24px rgba(10,20,45,.06);display:flex;flex-direction:column}
+  .duo-card .kicker{font-family:var(--head);font-weight:700;font-size:13px;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:14px}
+  .duo-card h3{font-family:var(--head);font-weight:800;font-size:clamp(21px,2.4vw,25px);letter-spacing:-.5px;margin-bottom:10px;color:var(--text)}
+  .duo-card>p{color:var(--muted);font-size:15.5px;margin-bottom:20px}
+  .duo-list{list-style:none;display:flex;flex-direction:column;gap:11px;margin-top:auto}
+  .duo-list li{display:flex;gap:11px;align-items:flex-start;color:var(--text);font-size:15px}
+  .duo-list li svg{width:20px;height:20px;flex:none;stroke:var(--accent);fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round;margin-top:1px}
+
   /* CTA */
   .cta{text-align:center}
   .cta h2{margin-bottom:18px}
+  .cta-row{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
 
   footer{background:var(--footer-bg);border-top:1px solid var(--border);padding:40px 0}
   footer .wrap{display:flex;flex-wrap:wrap;gap:18px;align-items:center;justify-content:space-between}
@@ -202,7 +220,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
         <svg class="ic-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
         <svg class="ic-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/></svg>
       </button>
-      <a href="#waitlist" class="btn btn-primary">Join waitlist</a>
+      <a href="/signup" class="btn btn-primary">Get started free</a>
     </div>
   </div>
 </nav>
@@ -213,15 +231,12 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     <div>
       <span class="pill">iOS &amp; Web · AI-powered</span>
       <h1>Snap your notes.<br/><span class="accent">Crack the exam.</span></h1>
-      <p class="sub">Point your phone at any notes, textbook, slide, or PDF and get instant flashcards, quizzes, and an AI tutor — then a memory-science review loop drills you on exactly what you're about to forget.</p>
-      <form class="waitlist" id="wl">
-        <input type="text" class="hp" name="company" tabindex="-1" autocomplete="off" aria-hidden="true" />
-        <input type="email" id="email" placeholder="you@email.com" required aria-label="Email address" />
-        <button class="btn btn-primary" type="submit">Get early access</button>
-      </form>
-      <div class="ok" id="ok">🐙 You're on the list! We'll email you when Krakenote launches.</div>
-      <div class="err" id="err"></div>
-      <p class="note">Join the waitlist — be first in line when we launch. No spam, ever.</p>
+      <p class="sub">Your note-taker and AI study aid in one. Take notes in clean notebooks, then turn any note, textbook, slide, or PDF into instant flashcards, quizzes, and an AI tutor — with a review loop that drills you on exactly what you're about to forget.</p>
+      <div class="hero-cta">
+        <a href="/signup" class="btn btn-primary">Get started free</a>
+        <a href="/login" class="btn btn-ghost">Sign in</a>
+      </div>
+      <p class="note">Free to start · No credit card · iOS &amp; web</p>
     </div>
     <div class="art">
       <div class="phone">
@@ -245,6 +260,36 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     </div>
   </div>
 </header>
+
+<section class="block" id="product">
+  <div class="wrap">
+    <div class="eyebrow">Notes + Study aid</div>
+    <h2>Write it down. Lock it in.</h2>
+    <p class="lead">Krakenote is two things in one — a clean place to take notes, and an AI study aid that turns them into real recall.</p>
+    <div class="duo">
+      <div class="duo-card">
+        <div class="kicker">Notes</div>
+        <h3>A clean home for everything you write</h3>
+        <p>Capture lectures, ideas, and reading in organized notebooks — rich, easy to edit, and synced the moment you type.</p>
+        <ul class="duo-list">
+          <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Notebooks that keep every class organized</li>
+          <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Autosave and instant sync across iOS &amp; web</li>
+          <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Pin the notes you reach for most</li>
+        </ul>
+      </div>
+      <div class="duo-card">
+        <div class="kicker">Study aid</div>
+        <h3>Turn those notes into mastery</h3>
+        <p>One tap turns any note, PDF, or photo into AI flashcards, quizzes, and a tutor — then spaced repetition drills you right before you'd forget.</p>
+        <ul class="duo-list">
+          <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>AI flashcards &amp; quizzes from any page</li>
+          <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>An AI tutor that shows the work</li>
+          <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Spaced-repetition review that builds recall</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
 
 <section class="block" id="how">
   <div class="wrap">
@@ -285,8 +330,8 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     <h2>Free to start. Pro when you're serious.</h2>
     <p class="lead">Make decks and review for free. Go Pro for unlimited AI, the Tutor, and exam mode.</p>
     <div class="price">
-      <div class="big">$4.99<span> /mo</span></div>
-      <div style="color:var(--muted);margin-top:4px">or $29.99/yr · 7-day free trial</div>
+      <div class="big">$5.99<span> /mo</span></div>
+      <div style="color:var(--muted);margin-top:4px">or $59.99/yr · 7-day free trial</div>
       <ul>
         <li>Unlimited AI flashcards &amp; quizzes</li>
         <li>AI Tutor: show-the-work, practice &amp; critique</li>
@@ -294,23 +339,20 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
         <li>Cloud &amp; document uploads</li>
         <li>Full sync across iOS &amp; web</li>
       </ul>
-      <div><a href="#waitlist" class="btn btn-primary">Join the waitlist</a></div>
+      <div><a href="/signup" class="btn btn-primary">Get started free</a></div>
     </div>
   </div>
 </section>
 
-<section class="block cta" id="waitlist">
+<section class="block cta" id="get-started">
   <div class="wrap">
-    <div class="eyebrow">Early access</div>
-    <h2>Be first to release the Krakenote</h2>
-    <p class="lead">We're launching soon on the App Store. Join the waitlist and we'll let you know the moment it's live — plus early-supporter perks.</p>
-    <form class="waitlist" id="wl2" style="margin:0 auto">
-      <input type="text" class="hp" name="company" tabindex="-1" autocomplete="off" aria-hidden="true" />
-      <input type="email" id="email2" placeholder="you@email.com" required aria-label="Email address" />
-      <button class="btn btn-primary" type="submit">Get early access</button>
-    </form>
-    <div class="ok" id="ok2" style="text-align:center">🐙 You're on the list! We'll be in touch soon.</div>
-    <div class="err" id="err2" style="text-align:center"></div>
+    <div class="eyebrow">Get started</div>
+    <h2>Release the Krakenote</h2>
+    <p class="lead">Create a free account and turn your first notes into flashcards in under a minute — on iOS and the web.</p>
+    <div class="cta-row">
+      <a href="/signup" class="btn btn-primary">Get started free</a>
+      <a href="/login" class="btn btn-ghost">Sign in</a>
+    </div>
   </div>
 </section>
 
@@ -321,7 +363,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       <a href="/privacy.html">Privacy Policy</a>
       <a href="/terms.html">Terms</a>
       <a href="/support.html">Support</a>
-      <a href="#waitlist">Waitlist</a>
+      <a href="/login">Sign in</a>
     </div>
     <div class="copy">© 2026 Krakenote. All rights reserved.</div>
   </div>
@@ -343,33 +385,6 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     if(btn)btn.addEventListener('click',function(){set(current()==='dark'?'light':'dark');});
   })();
 
-  // Waitlist forms
-  function wire(formId, okId, emailId, errId){
-    var f=document.getElementById(formId), ok=document.getElementById(okId),
-        em=document.getElementById(emailId), err=document.getElementById(errId),
-        btn=f.querySelector('button[type="submit"]'), hp=f.querySelector('.hp');
-    f.addEventListener('submit', async function(e){
-      e.preventDefault();
-      var email=(em.value||'').trim();
-      if(!email || email.indexOf('@')<0) return;
-      err.style.display='none'; btn.disabled=true;
-      try{
-        var res=await fetch('/api/waitlist',{
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({email:email, hp:hp?hp.value:'', source:formId})
-        });
-        var data=await res.json().catch(function(){return {};});
-        if(!res.ok || !data.ok) throw new Error(data.error||'Something went wrong. Please try again.');
-        f.style.display='none'; ok.style.display='block';
-      }catch(ex){
-        btn.disabled=false;
-        err.textContent=ex.message; err.style.display='block';
-      }
-    });
-  }
-  wire('wl','ok','email','err');
-  wire('wl2','ok2','email2','err2');
   // Top-of-funnel analytics (KRA-98): a single anonymous landing view. Fire-and-forget.
   try { fetch('/api/track', { method:'POST', headers:{'Content-Type':'application/json'}, keepalive:true,
     body: JSON.stringify({ name:'landing_view', platform:'web', props:{ path: location.pathname, ref: document.referrer ? new URL(document.referrer).hostname : '' } }) }).catch(function(){}); } catch(e){}

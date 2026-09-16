@@ -110,7 +110,10 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   .shell{display:grid;grid-template-columns:236px 1fr;min-height:calc(100vh - 70px)}
   /* Nav-sidebar styling scoped to #sidebar — a bare `aside` selector also hit the
      notes list (<aside class="nt-side">) and gave it nav sizing/border. */
-  #sidebar{position:sticky;top:70px;align-self:start;height:calc(100vh - 70px);overflow-y:auto;border-right:1px solid var(--border);padding:22px 14px;display:flex;flex-direction:column;gap:6px}
+  #sidebar{position:sticky;top:70px;align-self:start;height:calc(100vh - 70px);overflow-y:auto;border-right:1px solid var(--border);padding:22px 14px;display:flex;flex-direction:column;gap:6px;scrollbar-width:none}
+  /* Hide the scrollbar chrome so it can't steal width and push the collapsed-rail
+     icons off-center (KRA-108). Scrolling still works via wheel/trackpad. */
+  #sidebar::-webkit-scrollbar{width:0;height:0;display:none}
   .navlink .ic{width:26px;height:26px}
   .logout-ic{width:26px;height:26px;flex:none;stroke:var(--danger);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
   .nav-collapse{align-self:flex-end;background:transparent;border:1px solid var(--border);color:var(--muted);width:30px;height:30px;border-radius:9px;cursor:pointer;font-size:18px;line-height:1;display:none;align-items:center;justify-content:center;margin-bottom:4px}
@@ -365,7 +368,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       <button class="theme-toggle menu-btn" id="menuBtn" type="button" aria-label="Toggle navigation" aria-expanded="false">
         <i class="ic" style="--i:url(/icons/list.svg)"></i>
       </button>
-      <a class="brand" href="/"><i class="mark"></i>Krakenote</a>
+      <a class="brand" id="appBrand" href="/"><i class="mark"></i>Krakenote</a>
     </div>
     <div class="navright">
       <span id="whoami"></span>
@@ -461,7 +464,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
         <button class="quick-btn" data-go="decks"><i class="ic" style="--i:url(/icons/upload.svg)"></i><span><b>Add material</b><small>Open a deck → paste, drop a file, or a link</small></span></button>
         <button class="quick-btn" data-go="review"><i class="ic" style="--i:url(/icons/restartTime.svg)"></i><span><b>Review due</b><small>Study what's scheduled today</small></span></button>
         <button class="quick-btn" data-go="decks"><i class="ic" style="--i:url(/icons/list.svg)"></i><span><b>Your decks</b><small>Browse and manage decks</small></span></button>
-        <button class="quick-btn" data-go="notes"><i class="ic" style="--i:url(/icons/paper.svg)"></i><span><b>New note</b><small>Jot something down</small></span></button>
+        <button class="quick-btn" id="homeNewNote"><i class="ic" style="--i:url(/icons/paper.svg)"></i><span><b>New note</b><small>Jot something down</small></span></button>
         <button class="quick-btn" data-go="quizzes"><i class="ic" style="--i:url(/icons/question.svg)"></i><span><b>Take a quiz</b><small>Test yourself, get a score</small></span></button>
       </div>
     </div>
@@ -620,7 +623,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
 
     <!-- ACCOUNT -->
     <div class="panel view-panel hidden" id="accountPanel">
-      <div class="panel-head"><i class="ic" style="--i:url(/icons/profile.svg)"></i><h2>Account</h2></div>
+      <div class="panel-head"><i class="ic" style="--i:url(/icons/account.svg)"></i><h2>Account</h2></div>
       <div class="acct-body">
         <div class="acct-row"><span class="acct-label">Signed in as</span><span id="acctEmail">—</span></div>
         <div class="acct-row"><span class="acct-label">Plan</span><span id="acctPlan">Free</span></div>
@@ -2642,6 +2645,14 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     b.addEventListener('click', function(){ gradeCard(parseInt(b.getAttribute('data-grade'), 10)); });
   });
   // Home quick-action tiles
+  // Brand logo: when signed in, go to the in-app home instead of the marketing splash (KRA-115).
+  (function(){ var brand = $('appBrand'); if (brand) brand.addEventListener('click', function(e){
+    if (!$('appView').classList.contains('hidden')){ e.preventDefault(); go('home'); }
+  }); })();
+  // Home "New note" tile actually creates a note and opens it (KRA-129).
+  (function(){ var b = $('homeNewNote'); if (b) b.addEventListener('click', function(){
+    go('notes'); createNote(); $('sidebar').classList.remove('open');
+  }); })();
   Array.prototype.forEach.call(document.querySelectorAll('.quick-btn[data-go]'), function(b){
     b.addEventListener('click', function(){ go(b.getAttribute('data-go')); $('sidebar').classList.remove('open'); });
   });

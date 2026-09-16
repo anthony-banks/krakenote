@@ -2393,6 +2393,19 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       up.appendChild(ub); el.appendChild(up);
       return;
     }
+    // Complimentary (admin-granted) Pro: no real subscription behind it, so show a
+    // friendly note and no Manage button — there's nothing to manage.
+    var comped = subStatus === 'comped' || (!subStatus && !subStore);
+    if (comped){
+      var crow = document.createElement('div'); crow.className = 'billing-plan';
+      var cname = document.createElement('strong'); cname.textContent = 'Krakenote Pro';
+      var cpill = document.createElement('span'); cpill.className = 'billing-pill ok'; cpill.textContent = 'Complimentary';
+      crow.appendChild(cname); crow.appendChild(cpill); el.appendChild(crow);
+      var cmeta = document.createElement('p'); cmeta.className = 'billing-meta';
+      cmeta.textContent = 'You have complimentary Pro access — unlimited, smarter AI, on us. 🐙';
+      el.appendChild(cmeta);
+      return;
+    }
     // Pro: status pill + renewal/expiry line.
     var st = subStatus || 'active';
     var pillClass = 'ok', pillText = 'Active', line = '';

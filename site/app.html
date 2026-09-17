@@ -267,6 +267,16 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   /* Home quick actions */
   .quick-actions{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:18px 22px}
   @media(max-width:560px){.quick-actions{grid-template-columns:1fr}}
+  /* iOS "coming soon" touchpoints (KRA-137) */
+  .ios-soon{display:flex;align-items:center;gap:12px;background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 13%,var(--surface)),var(--surface));border:1px solid color-mix(in srgb,var(--accent) 30%,var(--border));border-radius:14px;padding:13px 16px;margin:0 22px 8px}
+  .ios-soon .emoji{font-size:22px;flex:none}
+  .ios-soon .txt{flex:1;min-width:0}
+  .ios-soon .txt b{font-family:var(--head);font-size:14.5px}
+  .ios-soon .txt small{display:block;color:var(--muted);font-size:12.5px;margin-top:1px}
+  .ios-soon .badge{font-family:var(--head);font-weight:700;font-size:10.5px;letter-spacing:.5px;text-transform:uppercase;color:var(--accent);background:color-mix(in srgb,var(--accent) 15%,transparent);border:1px solid color-mix(in srgb,var(--accent) 34%,transparent);padding:3px 9px;border-radius:999px;flex:none}
+  .ios-soon-x{background:none;border:0;color:var(--muted);font-size:14px;cursor:pointer;flex:none;padding:2px 7px;border-radius:6px}
+  .ios-soon-x:hover{color:var(--accent)}
+  .acct-body .ios-soon{margin:0 0 4px}
   .quick-btn{display:flex;align-items:center;gap:14px;text-align:left;background:var(--surface-2);border:1px solid var(--border);border-radius:14px;padding:16px;cursor:pointer;color:var(--text);transition:transform .12s ease,border-color .12s ease}
   .quick-btn:hover{transform:translateY(-2px);border-color:var(--accent)}
   .quick-btn .ic{width:24px;height:24px;color:var(--accent)}
@@ -470,6 +480,12 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     <!-- HOME: quick actions -->
     <div class="panel view-panel" id="homePanel">
       <div class="panel-head"><i class="ic" style="--i:url(/icons/paper.svg)"></i><h2>Quick actions</h2></div>
+      <div class="ios-soon hidden" id="homeIosSoon">
+        <span class="emoji">📱</span>
+        <span class="txt"><b>Krakenote for iOS is coming soon</b><small>Snap notes and study on the go — everything synced with the web.</small></span>
+        <span class="badge">Coming soon</span>
+        <button class="ios-soon-x" id="homeIosX" type="button" aria-label="Dismiss">✕</button>
+      </div>
       <div class="quick-actions">
         <button class="quick-btn" data-go="decks"><i class="ic" style="--i:url(/icons/upload.svg)"></i><span><b>Add material</b><small>Open a deck → paste, drop a file, or a link</small></span></button>
         <button class="quick-btn" data-go="review"><i class="ic" style="--i:url(/icons/restartTime.svg)"></i><span><b>Review due</b><small>Study what's scheduled today</small></span></button>
@@ -558,6 +574,14 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       .nt-body ol li{padding-left:.25em}
       .nt-body li{margin:.15em 0}
       .nt-body a{color:var(--accent)}
+      .nt-body code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9em;background:var(--surface-2);border:1px solid var(--border);border-radius:5px;padding:1px 5px}
+      .nt-body pre{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9em;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;overflow-x:auto;white-space:pre-wrap;margin:.5em 0}
+      .nt-body pre code{background:none;border:0;padding:0}
+      .nt-body blockquote{border-left:3px solid var(--accent);margin:.5em 0;padding:2px 0 2px 14px;color:var(--muted)}
+      .note-pick-item{text-align:left;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;cursor:pointer;color:var(--text);display:flex;flex-direction:column;gap:2px}
+      .note-pick-item:hover{border-color:var(--accent)}
+      .note-pick-item b{font-size:14px}
+      .note-pick-item small{color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
       .nt-body u{text-decoration:underline}
       .nt-preview{flex:1;min-height:320px;overflow-y:auto;background:transparent;border:0;padding:2px 0;color:var(--text);line-height:1.7}
       .nt-preview h1,.nt-preview h2,.nt-preview h3{font-family:var(--head);margin:.6em 0 .3em}
@@ -606,6 +630,9 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
               <button type="button" data-fmt="normal" title="Normal text">¶</button>
               <button type="button" data-fmt="bullet" title="Bullet list">•</button>
               <button type="button" data-fmt="number" title="Numbered list">1.</button>
+              <button type="button" data-fmt="quote" title="Quote">&ldquo;</button>
+              <button type="button" data-fmt="code" title="Inline code" style="font-family:var(--mono, monospace)">&lt;&gt;</button>
+              <button type="button" data-fmt="codeblock" title="Code block" style="font-family:var(--mono, monospace)">{ }</button>
               <button type="button" data-fmt="indent" title="Indent / sub-bullet">→</button>
               <button type="button" data-fmt="outdent" title="Outdent">←</button>
               <span class="nt-fmtsep"></span>
@@ -700,6 +727,12 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
         <h3 class="acct-h">Billing &amp; subscription</h3>
         <div id="billingCard" class="billing-card"></div>
         <div class="acct-sep"></div>
+        <div class="ios-soon">
+          <span class="emoji">📱</span>
+          <span class="txt"><b>iOS app coming soon</b><small>Study on the go — capture, review, and sync with everything here.</small></span>
+          <span class="badge">Soon</span>
+        </div>
+        <div class="acct-sep"></div>
         <button class="linkbtn" id="acctSignout" type="button">Sign out</button>
       </div>
     </div>
@@ -754,6 +787,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
         <div class="row">
           <input type="file" id="genFile" multiple accept=".pdf,.txt,.md,.docx,.pptx,image/*,application/pdf,text/plain,text/markdown" />
           <button class="btn btn-primary" id="genBtn" type="button">✨ Generate cards</button>
+          <button class="linkbtn" id="importNoteBtn" type="button">📝 From a note</button>
           <button class="linkbtn" id="clearBtn" type="button">Clear</button>
         </div>
         <div class="drop-hint" id="dropHint">Tip: drag a PDF, image, .docx, or .pptx onto this box.</div>
@@ -893,6 +927,16 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       <div class="modal-title" id="promptTitle">Name</div>
       <input id="promptInput" type="text" style="margin:8px 0 4px" />
       <div class="modal-actions"><button class="linkbtn" id="promptCancel" type="button">Cancel</button><button class="btn btn-primary" id="promptOk" type="button">Save</button></div>
+    </div>
+  </div>
+
+  <!-- Import from a note into card generation (KRA-119) -->
+  <div class="modal-overlay hidden" id="notePickModal">
+    <div class="modal-box" style="max-width:520px;width:100%">
+      <div class="modal-title">Import from a note</div>
+      <input id="notePickSearch" type="search" placeholder="Search notes…" autocomplete="off" style="width:100%;box-sizing:border-box;margin:8px 0;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:transparent;color:var(--text)" />
+      <div id="notePickList" style="max-height:52vh;overflow-y:auto;display:flex;flex-direction:column;gap:6px"></div>
+      <div class="modal-actions"><button class="linkbtn" id="notePickCancel" type="button">Cancel</button></div>
     </div>
   </div>
 
@@ -1733,6 +1777,41 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     doGenerate(text, url, files, info.sigs);
   }
 
+  // Import from a note into the generate box (KRA-119): pick a note, load its
+  // plain text (title + body) into #genText so AI can make cards from it.
+  async function openNotePicker(){
+    $('notePickModal').classList.remove('hidden');
+    $('notePickSearch').value = '';
+    await loadNotePickList('');
+    setTimeout(function(){ $('notePickSearch').focus(); }, 30);
+  }
+  async function loadNotePickList(q){
+    var out = await api('/api/notes' + (q ? '?q=' + encodeURIComponent(q) : ''));
+    var wrap = $('notePickList'); wrap.innerHTML = '';
+    if (out.res.status === 401){ signOut(); return; }
+    var notes = (out.res.ok && out.data.ok) ? (out.data.notes || []) : [];
+    if (!notes.length){ wrap.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 4px">No notes found.</div>'; return; }
+    notes.forEach(function(n){
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'note-pick-item';
+      var t = document.createElement('b'); t.textContent = n.title || 'Untitled';
+      var s = document.createElement('small'); s.textContent = n.snippet || 'No additional text';
+      b.appendChild(t); b.appendChild(s);
+      b.addEventListener('click', function(){ importNoteIntoGen(n.id); });
+      wrap.appendChild(b);
+    });
+  }
+  async function importNoteIntoGen(id){
+    var out = await api('/api/notes/' + encodeURIComponent(id));
+    if (out.res.status === 401){ signOut(); return; }
+    if (!out.res.ok || !out.data.ok){ toast('err', 'Could not load that note.'); return; }
+    var note = out.data.note || {};
+    var tmp = document.createElement('div'); tmp.innerHTML = ntBodyToHtml(note.body || '');
+    var text = (tmp.textContent || '').replace(/\n{3,}/g, '\n\n').trim();
+    $('genText').value = (note.title ? note.title + '\n\n' : '') + text;
+    $('notePickModal').classList.add('hidden');
+    toast('ok', 'Loaded “' + (note.title || 'note') + '” — click Generate cards.');
+  }
+
   async function doGenerate(text, url, files, sigs){
     var cardType = (document.querySelector('input[name=cardType]:checked') || {}).value || 'mix';
 
@@ -2270,11 +2349,11 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     // Already HTML — sanitize on load too, not just on save: a body written by
     // the mobile app or a direct API call never passed through the save-time
     // sanitizer, so trusting it here would be stored-XSS on open.
-    if (/<(b|strong|i|em|u|s|mark|ul|ol|li|h[1-3]|p|div|br|a|span)\b/i.test(stored)) return ntSanitize(stored);
+    if (/<(b|strong|i|em|u|s|mark|code|pre|blockquote|ul|ol|li|h[1-3]|p|div|br|a|span)\b/i.test(stored)) return ntSanitize(stored);
     return ntMarkdown(stored); // markdown/plain → HTML
   }
   // Keep only a safe subset of tags/attrs from the contenteditable output.
-  var NT_ALLOWED = { B:1, STRONG:1, I:1, EM:1, U:1, S:1, STRIKE:1, MARK:1, SPAN:1, UL:1, OL:1, LI:1, H1:1, H2:1, H3:1, P:1, BR:1, DIV:1, A:1 };
+  var NT_ALLOWED = { B:1, STRONG:1, I:1, EM:1, U:1, S:1, STRIKE:1, MARK:1, SPAN:1, CODE:1, PRE:1, BLOCKQUOTE:1, UL:1, OL:1, LI:1, H1:1, H2:1, H3:1, P:1, BR:1, DIV:1, A:1 };
   // Preserve a small, safe set of inline styles (text color, highlight, bold) so
   // pasted/typed formatting survives the save→reload round-trip (KRA-114). Values
   // are read from the browser-parsed CSSStyleDeclaration, so they can't carry
@@ -2460,6 +2539,16 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
 
     bullet: function(){ document.execCommand('insertUnorderedList'); },
     number: function(){ document.execCommand('insertOrderedList'); },
+    quote: function(){ document.execCommand('formatBlock', false, 'blockquote'); },
+    codeblock: function(){ document.execCommand('formatBlock', false, 'pre'); },
+    code: function(){ // inline code: wrap the selection in <code> via the DOM (KRA-67)
+      var s = window.getSelection(); if (!s.rangeCount) return;
+      var r = s.getRangeAt(0); if (r.collapsed || !$('ntBody').contains(r.startContainer)) return;
+      var code = document.createElement('code');
+      try { code.appendChild(r.extractContents()); r.insertNode(code); } catch (e){ return; }
+      var sel = window.getSelection(); sel.removeAllRanges();
+      var after = document.createRange(); after.setStartAfter(code); after.collapse(true); sel.addRange(after);
+    },
     indent: function(){ document.execCommand('indent'); },   // sub-bullet / nest
     outdent: function(){ document.execCommand('outdent'); },
     clear: function(){ document.execCommand('removeFormat'); document.execCommand('unlink'); },
@@ -2899,6 +2988,13 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   (function(){ var b = $('homeNewNote'); if (b) b.addEventListener('click', function(){
     go('notes'); createNote(); $('sidebar').classList.remove('open');
   }); })();
+  // iOS "coming soon" home banner — dismissible (KRA-137).
+  (function(){
+    var banner = $('homeIosSoon'); if (!banner) return;
+    var dismissed = false; try { dismissed = localStorage.getItem('kn_ios_soon_dismissed') === '1'; } catch(e){}
+    if (!dismissed) banner.classList.remove('hidden');
+    var x = $('homeIosX'); if (x) x.addEventListener('click', function(){ banner.classList.add('hidden'); try { localStorage.setItem('kn_ios_soon_dismissed', '1'); } catch(e){} });
+  })();
   Array.prototype.forEach.call(document.querySelectorAll('.quick-btn[data-go]'), function(b){
     b.addEventListener('click', function(){ go(b.getAttribute('data-go')); $('sidebar').classList.remove('open'); });
   });
@@ -2963,6 +3059,10 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   $('reviewDeckSel').addEventListener('change', loadReviewLauncher);
   $('studyAgainBtn').addEventListener('click', studyAgain);
   // Capture: file input + drag-and-drop
+  // Import-from-note picker (KRA-119)
+  $('importNoteBtn').addEventListener('click', openNotePicker);
+  $('notePickCancel').addEventListener('click', function(){ $('notePickModal').classList.add('hidden'); });
+  (function(){ var npT; $('notePickSearch').addEventListener('input', function(){ clearTimeout(npT); npT = setTimeout(function(){ loadNotePickList($('notePickSearch').value.trim()); }, 200); }); })();
   $('genFile').addEventListener('change', function(){
     droppedFiles = [];
     var files = $('genFile').files || [];

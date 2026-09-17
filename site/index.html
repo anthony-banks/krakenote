@@ -124,6 +124,9 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   .waitlist input::placeholder{color:var(--muted)}
   .waitlist input:focus{border-color:var(--accent)}
   .note{font-size:13px;color:var(--muted);margin-top:12px}
+  .ios-badge{display:inline-flex;align-items:center;gap:6px;margin-top:14px;font-family:var(--head);font-weight:600;font-size:13px;color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);border:1px solid color-mix(in srgb,var(--accent) 32%,transparent);padding:7px 14px;border-radius:999px}
+  .ios-badge b{font-weight:700}
+  @media(max-width:900px){.ios-badge{margin-left:auto;margin-right:auto}}
   .ok{display:none;margin-top:14px;color:var(--accent);font-weight:600;font-family:var(--head)}
   .err{display:none;margin-top:12px;color:var(--danger);font-weight:600;font-family:var(--head);font-size:14px}
   .hp{position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;opacity:0}
@@ -237,6 +240,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
         <a href="/login" class="btn btn-ghost">Sign in</a>
       </div>
       <p class="note">Free to start · No credit card · iOS &amp; web</p>
+      <div class="ios-badge">📱 Native iOS app — <b>coming soon</b></div>
     </div>
     <div class="art">
       <div class="phone">

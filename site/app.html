@@ -612,6 +612,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
             <input class="nt-title" id="ntTitle" placeholder="Title" />
             <div class="nt-tools">
               <select id="ntMove" title="Notebook"></select>
+              <button class="linkbtn" id="ntShare" type="button">🔗 Share</button>
               <button class="linkbtn" id="ntDelete" type="button">Delete</button>
               <span class="nt-save" id="ntSave"></span>
             </div>
@@ -927,6 +928,15 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       <div class="modal-title" id="promptTitle">Name</div>
       <input id="promptInput" type="text" style="margin:8px 0 4px" />
       <div class="modal-actions"><button class="linkbtn" id="promptCancel" type="button">Cancel</button><button class="btn btn-primary" id="promptOk" type="button">Save</button></div>
+    </div>
+  </div>
+
+  <!-- Share a note publicly (KRA-11) -->
+  <div class="modal-overlay hidden" id="shareModal">
+    <div class="modal-box" style="max-width:520px;width:100%">
+      <div class="modal-title">Share note</div>
+      <div id="shareBody"></div>
+      <div class="modal-actions"><button class="linkbtn" id="shareClose" type="button">Close</button></div>
     </div>
   </div>
 
@@ -2392,6 +2402,50 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     return root.innerHTML;
   }
 
+  // ── Share a note publicly (KRA-11) ──
+  function openShare(){ if (!ntCurrent) return; renderShare(); $('shareModal').classList.remove('hidden'); }
+  function renderShare(){
+    var body = $('shareBody'); body.innerHTML = '';
+    if (ntCurrent && ntCurrent.share_id){
+      var url = location.origin + '/n/' + ntCurrent.share_id;
+      var p = document.createElement('p'); p.className = 'billing-meta'; p.style.marginTop = '0';
+      p.textContent = 'Anyone with this link can view this note (read-only). It updates as you edit.';
+      body.appendChild(p);
+      var row = document.createElement('div'); row.style.cssText = 'display:flex;gap:8px;margin:12px 0';
+      var inp = document.createElement('input'); inp.readOnly = true; inp.value = url;
+      inp.style.cssText = 'flex:1;min-width:0;padding:9px 11px;border:1px solid var(--border);border-radius:9px;background:var(--surface-2);color:var(--text);font-size:13px';
+      inp.addEventListener('focus', function(){ inp.select(); });
+      var copy = document.createElement('button'); copy.type = 'button'; copy.className = 'btn btn-primary'; copy.textContent = 'Copy';
+      copy.addEventListener('click', function(){ navigator.clipboard.writeText(url).then(function(){ copy.textContent = 'Copied ✓'; setTimeout(function(){ copy.textContent = 'Copy'; }, 1400); }).catch(function(){}); });
+      row.appendChild(inp); row.appendChild(copy); body.appendChild(row);
+      var stop = document.createElement('button'); stop.type = 'button'; stop.className = 'linkbtn'; stop.textContent = 'Stop sharing';
+      stop.style.color = 'var(--danger)'; stop.style.borderColor = 'color-mix(in srgb,var(--danger) 40%,transparent)';
+      stop.addEventListener('click', function(){ revokeShare(stop); });
+      body.appendChild(stop);
+    } else {
+      var p2 = document.createElement('p'); p2.className = 'billing-meta'; p2.style.marginTop = '0';
+      p2.textContent = 'Create a public link so anyone can read this note — no account needed. You can stop sharing anytime.';
+      body.appendChild(p2);
+      var mk = document.createElement('button'); mk.type = 'button'; mk.className = 'btn btn-primary'; mk.style.marginTop = '12px'; mk.textContent = '🔗 Create share link';
+      mk.addEventListener('click', function(){ createShare(mk); });
+      body.appendChild(mk);
+    }
+  }
+  async function createShare(btn){
+    if (!ntCurrent) return; btn.disabled = true; btn.textContent = 'Creating…';
+    var out = await api('/api/notes/' + encodeURIComponent(ntCurrent.id) + '/share', { method:'POST', body: '{}' });
+    if (out.res.status === 401){ signOut(); return; }
+    if (out.res.ok && out.data.ok){ ntCurrent.share_id = out.data.shareId; track('note_shared'); renderShare(); }
+    else { btn.disabled = false; btn.textContent = '🔗 Create share link'; toast('err', (out.data && out.data.error) || 'Could not create a link.'); }
+  }
+  async function revokeShare(btn){
+    if (!ntCurrent) return; if (btn) btn.disabled = true;
+    var out = await api('/api/notes/' + encodeURIComponent(ntCurrent.id) + '/share', { method:'DELETE' });
+    if (out.res.status === 401){ signOut(); return; }
+    if (out.res.ok && out.data.ok){ ntCurrent.share_id = null; renderShare(); toast('ok', 'Sharing stopped.'); }
+    else { if (btn) btn.disabled = false; toast('err', 'Could not stop sharing.'); }
+  }
+
   async function moveNote(){
     if (!ntCurrent) return;
     var nb = $('ntMove').value || null;
@@ -2475,6 +2529,8 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   });
   $('ntMove').addEventListener('change', moveNote);
   $('ntDelete').addEventListener('click', deleteNote);
+  $('ntShare').addEventListener('click', openShare);
+  $('shareClose').addEventListener('click', function(){ $('shareModal').classList.add('hidden'); });
 
   // ── AI clean-up / organize (Pro): preview & accept (KRA-122) ──
   var _cleanupHtml = '';

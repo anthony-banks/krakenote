@@ -528,6 +528,10 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       .nt-fmtbar button{min-width:34px;height:32px;padding:0 6px;border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:9px;font-size:15px;font-family:var(--body);cursor:pointer;display:flex;align-items:center;justify-content:center}
       .nt-fmtbar button:hover{border-color:var(--accent);color:var(--accent)}
       .nt-fmtsep{width:1px;height:20px;background:var(--border);margin:0 4px}
+      /* The sticky toolbar sits just under the app header; show its tooltips BELOW
+         the buttons so they don't hide behind the header (KRA-136 follow-up). */
+      .nt-fmtbar [data-tip]::after{bottom:auto;top:calc(100% + 7px);transform:translateX(-50%) translateY(-3px)}
+      .nt-fmtbar [data-tip]:hover::after,.nt-fmtbar [data-tip]:focus-visible::after{transform:translateX(-50%) translateY(0)}
       .nt-hl-ico{background:#fde68a;color:#111;padding:0 4px;border-radius:3px;font-size:13px;font-weight:700}
       .nt-color{position:relative;display:inline-flex;align-items:center;justify-content:center;width:34px;height:32px;border:1px solid var(--border);border-radius:9px;background:var(--surface);cursor:pointer;overflow:hidden}
       .nt-color:hover{border-color:var(--accent)}
@@ -2435,14 +2439,19 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     link: function(){
       var s = window.getSelection();
       var range = (s && s.rangeCount && $('ntBody').contains(s.anchorNode)) ? s.getRangeAt(0).cloneRange() : null;
-      var hasText = range && !range.collapsed;
+      var selText = range ? range.toString() : '';
       showPrompt('Add link', { placeholder: 'https://…', okLabel: 'Add' }, function(url){
         url = (url || '').trim(); if (!url) return;
         if (!/^(https?:\/\/|mailto:)/i.test(url)) url = 'https://' + url;
         $('ntBody').focus();
-        if (range){ var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range); }
-        if (hasText) document.execCommand('createLink', false, url);
-        else document.execCommand('insertHTML', false, '<a href="' + escapeHtml(url) + '">' + escapeHtml(url) + '</a>');
+        // Wrap the selection in an <a> via the DOM (deterministic — execCommand
+        // createLink is flaky and could drop the text). With no selection, insert
+        // a link whose text is the URL.
+        var a = document.createElement('a'); a.setAttribute('href', url);
+        if (range && selText){ a.appendChild(range.extractContents()); range.insertNode(a); }
+        else { a.textContent = url; if (range){ range.collapse(false); range.insertNode(a); } else { $('ntBody').appendChild(a); } }
+        var sel2 = window.getSelection(); sel2.removeAllRanges();
+        var after = document.createRange(); after.setStartAfter(a); after.collapse(true); sel2.addRange(after);
         scheduleNoteSave();
       });
     },

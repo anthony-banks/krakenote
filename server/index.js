@@ -771,6 +771,12 @@ app.post('/api/decks/:id/generate', requireUser, async (req, res) => {
   } catch (ex) {
     console.error('[generate] AI call failed:', ex?.message);
     await refundAi(req); // the call failed — give the slot back
+    // A too-long/large PDF (sent straight to the model) fails with an opaque
+    // 400-ish error — give a useful message instead of a generic one (KRA-139).
+    const m = (ex?.message || '').toLowerCase();
+    if (sourceKind === 'pdf' && (ex?.status === 400 || ex?.status === 413 || /page|too large|exceed|maximum/.test(m))) {
+      return res.status(422).json({ ok: false, error: 'This PDF is too long or large for AI processing (roughly 100 pages / 32 MB max). Try a shorter PDF, or split it into parts.' });
+    }
     return res.status(502).json({ ok: false, error: 'AI generation failed. Please try again.' });
   }
 
@@ -1565,6 +1571,16 @@ app.use('/vendor/katex', express.static(join(__dirname, '..', 'node_modules', 'k
 // Serve the static landing page.
 app.use(express.static(SITE_DIR, { extensions: ['html'] }));
 app.get('*', (_req, res) => res.sendFile(join(SITE_DIR, 'index.html')));
+
+// Turn body-parser's oversized-payload error into a friendly message instead of
+// a raw stack/HTML 413 (KRA-139). Must be last, after all routes.
+app.use((err, req, res, _next) => {
+  if (err && (err.type === 'entity.too.large' || err.status === 413 || err.statusCode === 413)) {
+    return res.status(413).json({ ok: false, error: 'That upload is too large. Please use a file under about ' + '8 MB.' });
+  }
+  console.error('[unhandled]', err?.message || err);
+  return res.status(500).json({ ok: false, error: 'Something went wrong. Please try again.' });
+});
 
 app.listen(PORT, () => {
   console.log(`Krakenote site listening on :${PORT} (supabase: ${Boolean(supabase)})`);

@@ -1672,6 +1672,14 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   var droppedFiles = [];
   var DOCX_MT = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
   var PPTX_MT = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+  // Reject oversized uploads up front (KRA-139) — the server body cap is ~12MB of
+  // base64, so keep raw files well under that. Returns the first too-big file, or null.
+  var MAX_FILE_MB = 8;
+  function oversizedFile(files){
+    for (var i = 0; i < files.length; i++){ if (files[i].size > MAX_FILE_MB * 1024 * 1024) return files[i]; }
+    return null;
+  }
+  function warnOversized(f){ toast('err', '“' + (f.name || 'That file') + '” is ' + (f.size / 1048576).toFixed(1) + ' MB — please use files under ' + MAX_FILE_MB + ' MB.'); }
 
   function setBusy(t){ $('genBusy').innerHTML = '<span class="spinner"></span> ' + t; }
   async function fileToBody(f){
@@ -2952,8 +2960,11 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   // Capture: file input + drag-and-drop
   $('genFile').addEventListener('change', function(){
     droppedFiles = [];
-    var n = ($('genFile').files || []).length;
-    if (n === 1) $('dropHint').textContent = 'Ready: ' + $('genFile').files[0].name + ' — click Generate cards.';
+    var files = $('genFile').files || [];
+    var big = oversizedFile(files);
+    if (big){ warnOversized(big); $('genFile').value = ''; $('dropHint').textContent = ''; return; }
+    var n = files.length;
+    if (n === 1) $('dropHint').textContent = 'Ready: ' + files[0].name + ' — click Generate cards.';
     else if (n > 1) $('dropHint').textContent = 'Ready: ' + n + ' files — click Generate cards.';
   });
   (function(){
@@ -2964,6 +2975,8 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       e.preventDefault(); form.classList.remove('dragover');
       var files = e.dataTransfer && e.dataTransfer.files;
       if (files && files.length){
+        var big = oversizedFile(files);
+        if (big){ warnOversized(big); return; }
         droppedFiles = Array.prototype.slice.call(files);
         $('genFile').value = '';
         $('dropHint').textContent = droppedFiles.length > 1

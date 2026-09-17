@@ -284,6 +284,10 @@ app.post('/api/auth/signup', async (req, res) => {
 // one level deep is safe).
 app.get(['/app', '/app/:view', '/login', '/signup'], (_req, res) => res.sendFile(join(SITE_DIR, 'app.html')));
 
+// Public read-only page for a shared note (KRA-11). The page reads the id from
+// the path and fetches /api/shared/:id; any unknown id renders a "not available".
+app.get('/n/:shareId', (_req, res) => res.sendFile(join(SITE_DIR, 'shared.html')));
+
 // ── User data API (RLS-enforced) ────────────────────────────────────────────
 // Each request runs AS the signed-in user: we verify their Supabase JWT, then
 // build a Supabase client carrying that token, so Row-Level Security is the
@@ -1328,7 +1332,7 @@ app.post('/api/notes', requireUser, async (req, res) => {
 app.get('/api/notes/:id', requireUser, async (req, res) => {
   const { data, error } = await req.db
     .from('notes')
-    .select('id, notebook_id, title, body, created_at, updated_at')
+    .select('id, notebook_id, title, body, created_at, updated_at, share_id')
     .eq('id', req.params.id)
     .maybeSingle();
   if (error) {
@@ -1337,6 +1341,40 @@ app.get('/api/notes/:id', requireUser, async (req, res) => {
   }
   if (!data) return res.status(404).json({ ok: false, error: 'Note not found.' });
   return res.json({ ok: true, note: data });
+});
+
+// Public sharing (KRA-11). Enable → mint an opaque share_id and return the path;
+// re-enabling returns the existing one. Revoke → clear it. Ownership is enforced
+// by RLS on req.db (the caller's own token).
+app.post('/api/notes/:id/share', requireUser, async (req, res) => {
+  const { data: note, error } = await req.db.from('notes').select('id, share_id').eq('id', req.params.id).maybeSingle();
+  if (error) return res.status(500).json({ ok: false, error: 'Could not load the note.' });
+  if (!note) return res.status(404).json({ ok: false, error: 'Note not found.' });
+  let shareId = note.share_id;
+  if (!shareId) {
+    shareId = crypto.randomBytes(12).toString('base64url'); // ~16 chars, unguessable
+    const { error: uErr } = await req.db.from('notes').update({ share_id: shareId }).eq('id', req.params.id);
+    if (uErr) { console.error('[share] set failed:', uErr.message); return res.status(500).json({ ok: false, error: 'Could not create a share link.' }); }
+  }
+  return res.json({ ok: true, shareId, path: '/n/' + shareId });
+});
+
+app.delete('/api/notes/:id/share', requireUser, async (req, res) => {
+  const { error } = await req.db.from('notes').update({ share_id: null }).eq('id', req.params.id);
+  if (error) { console.error('[share] revoke failed:', error.message); return res.status(500).json({ ok: false, error: 'Could not stop sharing.' }); }
+  return res.json({ ok: true });
+});
+
+// Public read of a shared note — NO auth. Returns only title + body (no owner
+// info). Service-role read by the unguessable share_id; light IP rate limit.
+app.get('/api/shared/:shareId', async (req, res) => {
+  if (rateLimited('shared:' + (req.ip || 'x'), 90)) return res.status(429).json({ ok: false, error: 'Too many requests — slow down.' });
+  const sid = String(req.params.shareId || '');
+  if (!/^[A-Za-z0-9_-]{8,64}$/.test(sid)) return res.status(404).json({ ok: false, error: 'Not found.' });
+  const { data, error } = await supabase.from('notes').select('title, body, updated_at').eq('share_id', sid).maybeSingle();
+  if (error) return res.status(500).json({ ok: false, error: 'Could not load this note.' });
+  if (!data) return res.status(404).json({ ok: false, error: 'This shared note isn’t available — it may have been unshared.' });
+  return res.json({ ok: true, title: data.title || 'Untitled', body: data.body || '', updatedAt: data.updated_at });
 });
 
 // Update a note (autosave). Any of title/body/notebookId; touches updated_at so it

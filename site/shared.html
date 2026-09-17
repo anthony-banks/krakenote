@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Shared note · Krakenote</title>
+<meta name="robots" content="noindex" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<script>(function(){try{var r=document.documentElement,s=localStorage.getItem('theme'),
+sys=matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';
+r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
+<style>
+  :root{
+    --bg:#26364f; --surface:#2f4267; --surface-2:#3a5079; --text:#eef0f6; --muted:#a9b6ca;
+    --border:rgba(233,231,241,.13); --accent:#7fb2ff; --cta:#6c63ff;
+    --head:'Poppins',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    --body:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  }
+  :root[data-theme="light"]{
+    --bg:#f4f5fb; --surface:#ffffff; --surface-2:#eef0f8; --text:#161826; --muted:#5b6678;
+    --border:rgba(20,22,45,.10); --accent:#4f5bd5; --cta:#5b52e6;
+  }
+  @media (prefers-color-scheme: light){ :root:not([data-theme="dark"]){
+    --bg:#f4f5fb; --surface:#ffffff; --surface-2:#eef0f8; --text:#161826; --muted:#5b6678;
+    --border:rgba(20,22,45,.10); --accent:#4f5bd5; --cta:#5b52e6; } }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:var(--body);line-height:1.6;-webkit-font-smoothing:antialiased;padding:0 20px 64px}
+  .top{max-width:720px;margin:0 auto;display:flex;align-items:center;gap:10px;padding:22px 0}
+  .brand{display:flex;align-items:center;gap:9px;font-family:var(--head);font-weight:800;font-size:19px;color:var(--text);text-decoration:none}
+  .brand .mark{width:34px;height:34px;border-radius:8px;object-fit:contain}
+  .tag{margin-left:auto;font-family:var(--head);font-weight:600;font-size:11.5px;letter-spacing:.4px;text-transform:uppercase;color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent);border:1px solid color-mix(in srgb,var(--accent) 32%,transparent);padding:4px 10px;border-radius:999px}
+  main{max-width:720px;margin:0 auto}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:18px;padding:34px 38px}
+  @media(max-width:600px){.card{padding:24px 22px}}
+  h1.note-title{font-family:var(--head);font-weight:800;font-size:clamp(26px,4vw,36px);letter-spacing:-.5px;line-height:1.12;margin-bottom:6px;text-wrap:balance}
+  .meta{color:var(--muted);font-size:13px;margin-bottom:22px;padding-bottom:18px;border-bottom:1px solid var(--border)}
+  .nb{font-size:16px;line-height:1.75;color:var(--text);word-wrap:break-word}
+  .nb h1,.nb h2,.nb h3{font-family:var(--head);margin:.7em 0 .3em;line-height:1.3}
+  .nb h1{font-size:1.5rem}.nb h2{font-size:1.3rem}.nb h3{font-size:1.12rem}
+  .nb p{margin:.5em 0}
+  .nb ul{padding-left:1.5em;margin:.4em 0}
+  .nb ol{padding-left:1.5em;margin:.4em 0}
+  .nb a{color:var(--accent)}
+  .nb code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9em;background:var(--surface-2);border:1px solid var(--border);border-radius:5px;padding:1px 5px}
+  .nb pre{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9em;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;overflow-x:auto;white-space:pre-wrap;margin:.6em 0}
+  .nb pre code{background:none;border:0;padding:0}
+  .nb blockquote{border-left:3px solid var(--accent);margin:.6em 0;padding:2px 0 2px 14px;color:var(--muted)}
+  .state{text-align:center;color:var(--muted);padding:60px 20px}
+  .state .emoji{font-size:40px;display:block;margin-bottom:12px}
+  .cta{max-width:720px;margin:22px auto 0;text-align:center;color:var(--muted);font-size:14px}
+  .cta a{display:inline-flex;align-items:center;gap:8px;margin-top:12px;font-family:var(--head);font-weight:700;font-size:15px;color:#fff;background:var(--cta);padding:12px 22px;border-radius:14px;text-decoration:none;box-shadow:0 10px 30px color-mix(in srgb,var(--cta) 38%,transparent)}
+  .cta a:hover{transform:translateY(-1px)}
+</style>
+</head>
+<body>
+  <div class="top">
+    <a class="brand" href="/"><img class="mark" src="/favicon.svg" alt="" />Krakenote</a>
+    <span class="tag">Shared note</span>
+  </div>
+  <main>
+    <div class="card" id="card">
+      <div class="state" id="state"><span class="emoji">🐙</span>Loading…</div>
+      <div id="noteWrap" style="display:none">
+        <h1 class="note-title" id="title"></h1>
+        <div class="meta" id="meta"></div>
+        <div class="nb" id="body"></div>
+      </div>
+    </div>
+    <div class="cta" id="cta" style="display:none">
+      Made with Krakenote — turn your notes into flashcards, quizzes, and an AI tutor.
+      <br><a href="/">Try Krakenote free →</a>
+    </div>
+  </main>
+
+<script>
+  // Minimal allow-list sanitizer (mirror of the app's) — the shared body is stored
+  // HTML but we never trust it blindly on a public page.
+  var ALLOWED = { B:1,STRONG:1,I:1,EM:1,U:1,S:1,STRIKE:1,MARK:1,SPAN:1,CODE:1,PRE:1,BLOCKQUOTE:1,UL:1,OL:1,LI:1,H1:1,H2:1,H3:1,P:1,BR:1,DIV:1,A:1 };
+  function cleanStyle(el){
+    var out='', skip={ '':1, initial:1, inherit:1, transparent:1, 'rgba(0, 0, 0, 0)':1 };
+    var c=el.style.color; if(c&&!skip[c]) out+='color:'+c+';';
+    var b=el.style.backgroundColor; if(b&&!skip[b]) out+='background-color:'+b+';';
+    var f=el.style.fontWeight; if(f==='bold'||parseInt(f,10)>=600) out+='font-weight:'+f+';';
+    var t=el.style.textDecorationLine||el.style.textDecoration; if(t&&/line-through|underline/.test(t)) out+='text-decoration:'+t+';';
+    return out;
+  }
+  function sanitize(html){
+    var root=document.createElement('div'); root.innerHTML=html||'';
+    (function walk(node){
+      Array.prototype.slice.call(node.childNodes).forEach(function(c){
+        if(c.nodeType===1){
+          if(!ALLOWED[c.tagName]){ while(c.firstChild)node.insertBefore(c.firstChild,c); node.removeChild(c); return; }
+          var href=c.tagName==='A'?c.getAttribute('href'):null, style=cleanStyle(c);
+          Array.prototype.slice.call(c.attributes).forEach(function(a){ c.removeAttribute(a.name); });
+          if(href&&/^(https?:|mailto:|#)/i.test(href)){ c.setAttribute('href',href); c.setAttribute('rel','noopener nofollow'); c.setAttribute('target','_blank'); }
+          if(style) c.setAttribute('style',style);
+          if(c.tagName==='SPAN'&&!style){ while(c.firstChild)node.insertBefore(c.firstChild,c); node.removeChild(c); return; }
+          walk(c);
+        }
+      });
+    })(root);
+    return root.innerHTML;
+  }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+  function toHtml(stored){
+    if(!stored) return '<p style="color:var(--muted)">This note is empty.</p>';
+    if(/<(b|strong|i|em|u|s|mark|code|pre|blockquote|ul|ol|li|h[1-3]|p|div|br|a|span)\b/i.test(stored)) return sanitize(stored);
+    return stored.split(/\n{2,}/).map(function(p){ return '<p>'+esc(p).replace(/\n/g,'<br>')+'</p>'; }).join('');
+  }
+  function showState(emoji, text){ var s=$('state'); s.style.display='block'; s.innerHTML='<span class="emoji">'+emoji+'</span>'+esc(text); $('noteWrap').style.display='none'; }
+  function $(id){ return document.getElementById(id); }
+
+  (async function(){
+    var m = location.pathname.match(/\/n\/([A-Za-z0-9_-]+)/);
+    var id = m && m[1];
+    if(!id){ showState('🔗','That link doesn’t look right.'); return; }
+    try{
+      var r = await fetch('/api/shared/' + encodeURIComponent(id), { cache:'no-store' });
+      var d = await r.json().catch(function(){ return {}; });
+      if(!r.ok || !d.ok){ showState('🙈', (d && d.error) || 'This shared note isn’t available.'); return; }
+      document.title = (d.title || 'Shared note') + ' · Krakenote';
+      $('title').textContent = d.title || 'Untitled';
+      var when = d.updatedAt ? new Date(d.updatedAt) : null;
+      $('meta').textContent = 'Shared via Krakenote' + (when && !isNaN(when) ? ' · updated ' + when.toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'}) : '');
+      $('body').innerHTML = toHtml(d.body || '');
+      $('state').style.display='none'; $('noteWrap').style.display='block'; $('cta').style.display='block';
+    }catch(e){ showState('🛠️','Could not load this note right now.'); }
+  })();
+</script>
+</body>
+</html>

@@ -952,6 +952,51 @@ app.post('/api/cards/:id/factcheck', requireUser, async (req, res) => {
   });
 });
 
+// AI "Clean up / organize" a note (KRA-122). Pro-only (a new feature), metered
+// against the daily AI cap. Returns reorganized HTML for a client-side preview;
+// the client sanitizes and only applies it if the user accepts.
+const CLEANUP_SCHEMA = { type: 'object', properties: { html: { type: 'string' } }, required: ['html'], additionalProperties: false };
+const CLEANUP_SYSTEM =
+  'You reorganize a personal study note into a cleaner, better-structured version. Improve structure and ' +
+  'readability: group related points, add short headings and bullet lists where helpful, and fix obvious ' +
+  'typos and run-on sentences. Do NOT add new facts, opinions, or content that is not already in the note — ' +
+  'only reorganize and lightly copyedit what is there. Return the result as HTML using ONLY these tags: ' +
+  '<h1> <h2> <h3> <p> <ul> <ol> <li> <b> <i> <u> <s> <mark> <br>. No other tags, no markdown, no code fences, no commentary.';
+
+app.post('/api/notes/:id/cleanup', requireUser, async (req, res) => {
+  if (!anthropic) return res.status(503).json({ ok: false, error: 'AI is not configured on this server yet.' });
+  const gate = await aiGate(req);
+  if (gate) return res.status(gate.status).json(gate.body);
+  if (!req.aiPro) return res.status(403).json({ ok: false, code: 'needs_pro', error: 'AI clean-up is a Krakenote Pro feature.' });
+  const { data: note, error } = await req.db.from('notes').select('title, body').eq('id', req.params.id).maybeSingle();
+  if (error) return res.status(500).json({ ok: false, error: 'Could not load the note.' });
+  if (!note) return res.status(404).json({ ok: false, error: 'Note not found.' });
+  const body = String(note.body || '').slice(0, 20000);
+  if (!body.trim()) return res.status(400).json({ ok: false, error: 'This note is empty — nothing to clean up.' });
+
+  const consume = await consumeAi(req, 'cleanup');
+  if (consume) return res.status(consume.status).json(consume.body);
+
+  let html;
+  try {
+    const msg = await anthropic.messages.create({
+      model: req.aiModel || AI_MODEL,
+      max_tokens: 4000,
+      system: CLEANUP_SYSTEM,
+      output_config: { format: { type: 'json_schema', schema: CLEANUP_SCHEMA }, ...(req.aiEffort ? { effort: req.aiEffort } : {}) },
+      messages: [{ role: 'user', content: [{ type: 'text', text: (note.title ? 'Title: ' + note.title + '\n\n' : '') + 'Note:\n' + body }] }],
+    });
+    if (msg.stop_reason === 'refusal') return res.status(422).json({ ok: false, error: 'The AI declined to clean up this note.' });
+    const block = (msg.content || []).find((b) => b.type === 'text');
+    html = String(JSON.parse(block?.text || '{}').html || '');
+  } catch (ex) {
+    console.error('[cleanup] failed:', ex?.message);
+    await refundAi(req); // the call failed — give the slot back
+    return res.status(502).json({ ok: false, error: 'Clean-up failed. Please try again.' });
+  }
+  return res.json({ ok: true, html });
+});
+
 // FSRS scheduler (replaces SM-2). Cards migrated from SM-2 arrive as state=New
 // and re-initialize on their next review. UI grade -> FSRS Rating mapping below.
 const scheduler = fsrs(generatorParameters({ enable_fuzz: true }));

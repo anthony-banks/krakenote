@@ -518,13 +518,23 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       .nt-item .d{font-size:11px;color:var(--muted);margin-top:4px}
       .nt-main{flex:1;display:flex;flex-direction:column;gap:12px;min-width:0;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:22px 24px}
       .nt-title{font-family:var(--head);font-weight:700;font-size:24px;color:var(--text);background:none;border:0;outline:none;width:100%;padding:2px 0}
-      .nt-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding-bottom:12px;border-bottom:1px solid var(--border)}
+      /* Sticky toolbar (KRA-136): stays reachable below the app header as a long
+         note scrolls the page. Opaque background so text scrolls under it cleanly. */
+      .nt-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 0 12px;border-bottom:1px solid var(--border);position:sticky;top:70px;background:var(--surface);z-index:5}
       .nt-tools select{font-family:var(--body);font-size:13px;padding:6px 10px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text)}
       .nt-save{font-size:12px;color:var(--muted);margin-left:auto}
       .nt-fmtbar{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
-      .nt-fmtbar button{width:34px;height:32px;border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:9px;font-size:15px;font-family:var(--body);cursor:pointer;display:flex;align-items:center;justify-content:center}
+      .nt-fmtbar button{min-width:34px;height:32px;padding:0 6px;border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:9px;font-size:15px;font-family:var(--body);cursor:pointer;display:flex;align-items:center;justify-content:center}
       .nt-fmtbar button:hover{border-color:var(--accent);color:var(--accent)}
       .nt-fmtsep{width:1px;height:20px;background:var(--border);margin:0 4px}
+      .nt-hl-ico{background:#fde68a;color:#111;padding:0 4px;border-radius:3px;font-size:13px;font-weight:700}
+      .nt-color{position:relative;display:inline-flex;align-items:center;justify-content:center;width:34px;height:32px;border:1px solid var(--border);border-radius:9px;background:var(--surface);cursor:pointer;overflow:hidden}
+      .nt-color:hover{border-color:var(--accent)}
+      .nt-color span{font-size:15px;border-bottom:3px solid var(--accent);line-height:1;padding-bottom:1px}
+      .nt-color input{position:absolute;inset:0;opacity:0;cursor:pointer;border:0;padding:0}
+      .nt-cleanup{min-width:0!important;padding:0 12px!important;gap:5px;font-family:var(--head)!important;font-weight:600;font-size:13px!important;color:var(--accent)!important;border-color:color-mix(in srgb,var(--accent) 45%,transparent)!important}
+      .nt-cleanup:hover{background:color-mix(in srgb,var(--accent) 12%,transparent)}
+      .nt-cleanup[disabled]{opacity:.6;cursor:default}
       .nt-body{flex:1;min-height:320px;overflow-y:auto;font-family:var(--body);font-size:15px;line-height:1.75;color:var(--text);background:transparent;border:0;padding:4px 2px;outline:none}
       .nt-body:empty:before{content:attr(data-ph);color:var(--muted)}
       .nt-body h1,.nt-body h2,.nt-body h3{font-family:var(--head);margin:.5em 0 .25em;line-height:1.3}
@@ -575,6 +585,10 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
               <button type="button" data-fmt="bold" title="Bold" style="font-weight:800">B</button>
               <button type="button" data-fmt="italic" title="Italic" style="font-style:italic">I</button>
               <button type="button" data-fmt="underline" title="Underline" style="text-decoration:underline">U</button>
+              <button type="button" data-fmt="strike" title="Strikethrough" style="text-decoration:line-through">S</button>
+              <button type="button" data-fmt="highlight" title="Highlight"><span class="nt-hl-ico">H</span></button>
+              <label class="nt-color" title="Text color"><span>A</span><input type="color" id="ntColorInput" value="#7fb2ff" /></label>
+              <button type="button" data-fmt="link" title="Add link" aria-label="Add link"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 007.5.5l3-3a5 5 0 00-7-7l-1.5 1.5"/><path d="M14 11a5 5 0 00-7.5-.5l-3 3a5 5 0 007 7l1.5-1.5"/></svg></button>
               <span class="nt-fmtsep"></span>
               <button type="button" data-fmt="h1" title="Heading 1">H1</button>
               <button type="button" data-fmt="h2" title="Heading 2">H2</button>
@@ -582,9 +596,11 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
               <button type="button" data-fmt="normal" title="Normal text">¶</button>
               <button type="button" data-fmt="bullet" title="Bullet list">•</button>
               <button type="button" data-fmt="number" title="Numbered list">1.</button>
-              <span class="nt-fmtsep"></span>
               <button type="button" data-fmt="indent" title="Indent / sub-bullet">→</button>
               <button type="button" data-fmt="outdent" title="Outdent">←</button>
+              <span class="nt-fmtsep"></span>
+              <button type="button" data-fmt="clear" title="Clear formatting">T✕</button>
+              <button type="button" id="ntCleanup" class="nt-cleanup" title="AI clean up &amp; organize (Pro)">✨ Clean up</button>
             </div>
             <div class="nt-body" id="ntBody" contenteditable="true" data-ph="Start writing…"></div>
           </div>
@@ -860,6 +876,16 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       <div class="modal-title" id="promptTitle">Name</div>
       <input id="promptInput" type="text" style="margin:8px 0 4px" />
       <div class="modal-actions"><button class="linkbtn" id="promptCancel" type="button">Cancel</button><button class="btn btn-primary" id="promptOk" type="button">Save</button></div>
+    </div>
+  </div>
+
+  <!-- AI clean-up preview (KRA-122): review the reorganized note, accept or discard -->
+  <div class="modal-overlay hidden" id="cleanupModal">
+    <div class="modal-box" style="max-width:660px;width:100%">
+      <div class="modal-title">✨ Clean-up preview</div>
+      <p style="color:var(--muted);font-size:13px;margin:2px 0 4px">Review the reorganized version. Accepting replaces your note (formatting kept).</p>
+      <div id="cleanupPreview" class="nt-body" style="max-height:52vh;overflow-y:auto;background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin:8px 0"></div>
+      <div class="modal-actions"><button class="linkbtn" id="cleanupDiscard" type="button">Discard</button><button class="btn btn-primary" id="cleanupAccept" type="button">Accept &amp; replace</button></div>
     </div>
   </div>
 
@@ -2216,7 +2242,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     return ntMarkdown(stored); // markdown/plain → HTML
   }
   // Keep only a safe subset of tags/attrs from the contenteditable output.
-  var NT_ALLOWED = { B:1, STRONG:1, I:1, EM:1, U:1, S:1, MARK:1, SPAN:1, UL:1, OL:1, LI:1, H1:1, H2:1, H3:1, P:1, BR:1, DIV:1, A:1 };
+  var NT_ALLOWED = { B:1, STRONG:1, I:1, EM:1, U:1, S:1, STRIKE:1, MARK:1, SPAN:1, UL:1, OL:1, LI:1, H1:1, H2:1, H3:1, P:1, BR:1, DIV:1, A:1 };
   // Preserve a small, safe set of inline styles (text color, highlight, bold) so
   // pasted/typed formatting survives the save→reload round-trip (KRA-114). Values
   // are read from the browser-parsed CSSStyleDeclaration, so they can't carry
@@ -2227,6 +2253,8 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     var color = el.style.color; if (color && !skip[color]) out += 'color:' + color + ';';
     var bg = el.style.backgroundColor; if (bg && !skip[bg]) out += 'background-color:' + bg + ';';
     var fw = el.style.fontWeight; if (fw === 'bold' || parseInt(fw, 10) >= 600) out += 'font-weight:' + fw + ';';
+    var td = el.style.textDecorationLine || el.style.textDecoration;
+    if (td && /line-through|underline/.test(td)) out += 'text-decoration:' + td + ';';
     return out;
   }
   function ntSanitize(html){
@@ -2337,6 +2365,34 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   $('ntMove').addEventListener('change', moveNote);
   $('ntDelete').addEventListener('click', deleteNote);
 
+  // ── AI clean-up / organize (Pro): preview & accept (KRA-122) ──
+  var _cleanupHtml = '';
+  async function cleanupNote(){
+    if (!ntCurrent) return;
+    var btn = $('ntCleanup'); var prev = btn.textContent; btn.disabled = true; btn.textContent = '✨ Cleaning…';
+    try {
+      var out = await api('/api/notes/' + encodeURIComponent(ntCurrent.id) + '/cleanup', { method:'POST', body: '{}' });
+      if (out.res.status === 401){ signOut(); return; }
+      if (out.res.status === 403 && out.data && out.data.code === 'needs_pro'){ openUpgrade('AI clean-up'); return; }
+      if (out.data && handleAiCode(out.data.code, out.data.error)) return; // ai_limit / quota
+      if (!out.res.ok || !out.data.ok){ toast('err', (out.data && out.data.error) || 'Clean-up failed.'); return; }
+      _cleanupHtml = ntSanitize(out.data.html || '');
+      if (!_cleanupHtml.trim()){ toast('err', 'Clean-up returned nothing to apply.'); return; }
+      $('cleanupPreview').innerHTML = _cleanupHtml;
+      mathify($('cleanupPreview'));
+      $('cleanupModal').classList.remove('hidden');
+    } catch (e){ toast('err', 'Clean-up failed. Please try again.'); }
+    finally { btn.disabled = false; btn.textContent = prev; }
+  }
+  function acceptCleanup(){
+    $('cleanupModal').classList.add('hidden');
+    if (!ntCurrent) return;
+    $('ntBody').innerHTML = _cleanupHtml;
+    saveNoteNow();
+    track('ai_cleanup');
+    toast('ok', 'Note cleaned up ✨');
+  }
+
   // ── Note formatting toolbar (native rich text via execCommand) ──
   try { document.execCommand('styleWithCSS', false, false); } catch (e){} // prefer <b>/<i>/<u> tags over styled spans
   // Heading of the block the caret is in (H1/H2/H3), or '' if none.
@@ -2356,10 +2412,15 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     document.execCommand('formatBlock', false, 'div');
     if (!already) document.execCommand('formatBlock', false, tag);
   }
+  // execCommand color/highlight need CSS spans (which the sanitizer preserves);
+  // run one command with styleWithCSS on, then restore tag-mode for b/i/u.
+  function ntWithCss(fn){ try { document.execCommand('styleWithCSS', false, true); } catch(e){} fn(); try { document.execCommand('styleWithCSS', false, false); } catch(e){} }
   var NT_FMT = {
     bold: function(){ document.execCommand('bold'); },
     italic: function(){ document.execCommand('italic'); },
     underline: function(){ document.execCommand('underline'); },
+    strike: function(){ document.execCommand('strikeThrough'); },
+    highlight: function(){ ntWithCss(function(){ if (!document.execCommand('hiliteColor', false, '#fde68a')) document.execCommand('backColor', false, '#fde68a'); }); },
     h1: function(){ ntApplyHeading('H1'); },
     h2: function(){ ntApplyHeading('H2'); },
     h3: function(){ ntApplyHeading('H3'); },
@@ -2369,6 +2430,21 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     number: function(){ document.execCommand('insertOrderedList'); },
     indent: function(){ document.execCommand('indent'); },   // sub-bullet / nest
     outdent: function(){ document.execCommand('outdent'); },
+    clear: function(){ document.execCommand('removeFormat'); document.execCommand('unlink'); },
+    link: function(){
+      var s = window.getSelection();
+      var range = (s && s.rangeCount && $('ntBody').contains(s.anchorNode)) ? s.getRangeAt(0).cloneRange() : null;
+      var hasText = range && !range.collapsed;
+      showPrompt('Add link', { placeholder: 'https://…', okLabel: 'Add' }, function(url){
+        url = (url || '').trim(); if (!url) return;
+        if (!/^(https?:\/\/|mailto:)/i.test(url)) url = 'https://' + url;
+        $('ntBody').focus();
+        if (range){ var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range); }
+        if (hasText) document.execCommand('createLink', false, url);
+        else document.execCommand('insertHTML', false, '<a href="' + escapeHtml(url) + '">' + escapeHtml(url) + '</a>');
+        scheduleNoteSave();
+      });
+    },
   };
   Array.prototype.forEach.call($('ntFmtBar').querySelectorAll('button[data-fmt]'), function(b){
     b.addEventListener('mousedown', function(e){ e.preventDefault(); }); // keep editor focus/selection
@@ -2378,6 +2454,40 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       scheduleNoteSave();
     });
   });
+  // Text color: the native picker steals focus, so capture the selection on the
+  // opening mousedown, then re-apply it before coloring (KRA-68).
+  (function(){
+    var ci = $('ntColorInput'); if (!ci) return;
+    var savedRange = null;
+    ci.parentNode.addEventListener('mousedown', function(){
+      var s = window.getSelection();
+      savedRange = (s && s.rangeCount && $('ntBody').contains(s.anchorNode)) ? s.getRangeAt(0).cloneRange() : null;
+    });
+    ci.addEventListener('input', function(){
+      $('ntBody').focus();
+      if (savedRange){ var s = window.getSelection(); s.removeAllRanges(); s.addRange(savedRange); }
+      ntWithCss(function(){ document.execCommand('foreColor', false, ci.value); });
+      scheduleNoteSave();
+    });
+  })();
+  // Markdown-style list hotkeys: "- "/"* " → bullet, "1. " → numbered (KRA-60).
+  $('ntBody').addEventListener('keydown', function(e){
+    if (e.key !== ' ' || e.ctrlKey || e.metaKey) return;
+    var s = window.getSelection(); if (!s.rangeCount) return;
+    var r = s.getRangeAt(0); if (!r.collapsed) return;
+    var node = r.startContainer; if (node.nodeType !== 3) return;
+    var m = node.textContent.slice(0, r.startOffset).match(/^\s*([-*]|1\.)$/); if (!m) return;
+    var prev = node.previousSibling; // must be the first content of its block
+    while (prev){ if ((prev.textContent || '').trim()) return; prev = prev.previousSibling; }
+    e.preventDefault();
+    var del = document.createRange(); del.setStart(node, 0); del.setEnd(node, r.startOffset); del.deleteContents();
+    document.execCommand(m[1] === '1.' ? 'insertOrderedList' : 'insertUnorderedList');
+    scheduleNoteSave();
+  });
+  // AI "Clean up / organize" (Pro) — preview & accept (KRA-122).
+  $('ntCleanup').addEventListener('click', cleanupNote);
+  $('cleanupDiscard').addEventListener('click', function(){ $('cleanupModal').classList.add('hidden'); });
+  $('cleanupAccept').addEventListener('click', acceptCleanup);
 
   // Promote native `title` hints on icon-only controls to styled, accessible
   // tooltips (data-tip for the visual, aria-label to keep a screen-reader name).

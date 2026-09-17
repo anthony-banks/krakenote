@@ -277,6 +277,11 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   /* Pick-a-deck bodies (quiz, upload) */
   .pick-body{padding:18px 22px}
   .pick-hint{color:var(--muted);font-size:14px;margin-bottom:14px}
+  .quiz-lens{display:flex;align-items:center;gap:8px;margin-bottom:18px;flex-wrap:wrap}
+  .quiz-lens-label{font-family:var(--head);font-weight:600;font-size:13px;color:var(--muted);margin-right:2px}
+  .quiz-lens button{font-family:var(--head);font-weight:600;font-size:13px;padding:6px 14px;border-radius:999px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;transition:background .12s ease,border-color .12s ease,color .12s ease}
+  .quiz-lens button:hover{border-color:var(--accent);color:var(--accent)}
+  .quiz-lens button.on{background:var(--cta);border-color:transparent;color:#fff}
   .pick-deck{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:10px;cursor:pointer;color:var(--text)}
   .pick-deck:hover{border-color:var(--accent)}
   .pick-deck .pd-title{font-family:var(--head);font-weight:700;font-size:15px}
@@ -634,6 +639,13 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       <div class="panel-head"><i class="ic" style="--i:url(/icons/question.svg)"></i><h2>Quizzes</h2></div>
       <div class="pick-body">
         <p class="pick-hint">Pick a deck to quiz yourself — multiple choice, scored. This is a self-test; it doesn't change your review schedule.</p>
+        <div class="quiz-lens" id="quizLens">
+          <span class="quiz-lens-label">Questions</span>
+          <button type="button" data-len="5">5</button>
+          <button type="button" data-len="10">10</button>
+          <button type="button" data-len="20">20</button>
+          <button type="button" data-len="all">All</button>
+        </div>
         <div class="state" id="quizState"><span class="emoji">🐙</span><h3>Loading…</h3><p>Fetching your decks.</p></div>
         <div id="quizDeckList"></div>
       </div>
@@ -1936,6 +1948,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
 
   // ── Quizzes ──
   var quizCards = [], quizIdx = 0, quizScore = 0;
+  var quizLen = (function(){ try { return localStorage.getItem('kn_quiz_len') || '10'; } catch(e){ return '10'; } })(); // KRA-127
 
   function shuffle(a){ for (var i = a.length - 1; i > 0; i--){ var j = Math.floor(Math.random() * (i + 1)); var t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
   function quizState(emoji, title, body){
@@ -1972,7 +1985,8 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     var cards = (out.data.cards || []).filter(function(c){ return c.front && c.back; });
     if (cards.length < 4){ window.alert('A quiz needs at least 4 cards. This deck has ' + cards.length + '.'); return; }
     var allBacks = cards.map(function(c){ return c.back; });
-    quizCards = shuffle(cards.slice()).slice(0, 20).map(function(c){
+    var n = quizLen === 'all' ? cards.length : parseInt(quizLen, 10) || 10; // KRA-127
+    quizCards = shuffle(cards.slice()).slice(0, n).map(function(c){
       var distractors = shuffle(allBacks.filter(function(b){ return b !== c.back; })).slice(0, 3);
       return { q: c.front, answer: c.back, options: shuffle([c.back].concat(distractors)) };
     });
@@ -2878,6 +2892,14 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   // Quiz overlay
   $('quizClose').addEventListener('click', closeQuiz);
   $('quizRetry').addEventListener('click', function(){ closeQuiz(); loadQuizPicker(); });
+  // Quiz length selector (KRA-127)
+  (function(){
+    var lens = $('quizLens'); if (!lens) return;
+    var btns = Array.prototype.slice.call(lens.querySelectorAll('button'));
+    function reflect(){ btns.forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-len') === quizLen); }); }
+    btns.forEach(function(b){ b.addEventListener('click', function(){ quizLen = b.getAttribute('data-len'); try { localStorage.setItem('kn_quiz_len', quizLen); } catch(e){} reflect(); }); });
+    reflect();
+  })();
   // Upload: new deck shortcut
   $('uploadNewDeckBtn').addEventListener('click', function(){ go('decks'); showDeckForm(); });
   // Account

@@ -48,6 +48,11 @@ const supabase =
 // be tuned (e.g. ANTHROPIC_MODEL=claude-haiku-4-5) without a code change.
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const AI_MODEL = process.env.ANTHROPIC_MODEL || 'claude-opus-4-8';
+// Card generation is high-volume and latency-sensitive (KRA-124) — flashcards are
+// a fairly mechanical task, so Pro generation uses a faster model (Sonnet 5, ~2x
+// faster than Opus at comparable card quality). Opus stays for the reasoning-heavy
+// features (fact-check, note clean-up). Free users keep the metered Haiku model.
+const AI_MODEL_GEN = process.env.ANTHROPIC_GEN_MODEL || 'claude-sonnet-5';
 const anthropic = ANTHROPIC_API_KEY ? new Anthropic({ apiKey: ANTHROPIC_API_KEY }) : null;
 
 // Shared secret for the RevenueCat webhook (set as the Authorization header in
@@ -752,8 +757,8 @@ app.post('/api/decks/:id/generate', requireUser, async (req, res) => {
   let result;
   try {
     const msg = await anthropic.messages.create({
-      model: req.aiModel || AI_MODEL,
-      max_tokens: 16000,
+      model: req.aiPro ? AI_MODEL_GEN : req.aiModel, // Sonnet 5 for Pro gen (fast), Haiku for free
+      max_tokens: 8000, // 40-card cap needs ~6k; 16k was oversized and slowed worst-case
       system: GEN_SYSTEM + typeInstr,
       output_config: { format: { type: 'json_schema', schema: CARD_SCHEMA }, ...(req.aiEffort ? { effort: req.aiEffort } : {}) },
       messages: [{ role: 'user', content: userContent }],

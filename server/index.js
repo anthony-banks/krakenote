@@ -1104,11 +1104,23 @@ app.get('/api/profile', requireUser, async (req, res) => {
   });
 });
 
+// Write to the caller's own profile row using their token. The billing-column
+// lock revoked table-level INSERT/UPDATE (granting only specific columns), which
+// makes PostgREST's upsert fail — `ON CONFLICT DO UPDATE` requires table-level
+// UPDATE. So we do a plain UPDATE (column grants allow it), then INSERT the row
+// if it doesn't exist yet. Billing columns stay unwritable by the user. Returns
+// an error object or null.
+async function saveOwnProfile(db, userId, patch) {
+  const upd = await db.from('profiles').update(patch).eq('id', userId).select('id');
+  if (upd.error) return upd.error;
+  if (upd.data && upd.data.length) return null; // updated the existing row
+  const ins = await db.from('profiles').insert({ id: userId, ...patch });
+  return ins.error || null;
+}
+
 // Free user asks for AI access — flags the account for the admin approval queue.
 app.post('/api/request-access', requireUser, async (req, res) => {
-  const { error } = await req.db
-    .from('profiles')
-    .upsert({ id: req.user.id, access_requested_at: new Date().toISOString() }, { onConflict: 'id' });
+  const error = await saveOwnProfile(req.db, req.user.id, { access_requested_at: new Date().toISOString() });
   if (error) {
     console.error('[access] request failed:', error.message);
     return res.status(500).json({ ok: false, error: 'Could not submit your request.' });
@@ -1119,9 +1131,7 @@ app.post('/api/request-access', requireUser, async (req, res) => {
 app.patch('/api/profile', requireUser, async (req, res) => {
   const firstName = typeof req.body?.firstName === 'string' ? req.body.firstName.trim().slice(0, 80) : '';
   const lastName = typeof req.body?.lastName === 'string' ? req.body.lastName.trim().slice(0, 80) : '';
-  const { error } = await req.db
-    .from('profiles')
-    .upsert({ id: req.user.id, first_name: firstName || null, last_name: lastName || null, updated_at: new Date().toISOString() }, { onConflict: 'id' });
+  const error = await saveOwnProfile(req.db, req.user.id, { first_name: firstName || null, last_name: lastName || null, updated_at: new Date().toISOString() });
   if (error) {
     console.error('[profile] save failed:', error.message);
     return res.status(500).json({ ok: false, error: 'Could not save your profile.' });

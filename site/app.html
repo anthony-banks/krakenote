@@ -1742,7 +1742,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     $('genBusy').classList.add('on');
     var gen = '/api/decks/' + encodeURIComponent(currentDeck.id) + '/generate';
     try {
-      var allCards = [], summaries = [], srcMeta;
+      var allCards = [], summaries = [], srcMeta, anyTruncated = false;
       if (files.length){
         // Bulk: process files one at a time, accumulate into a single preview.
         for (var i = 0; i < files.length; i++){
@@ -1750,7 +1750,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
           var body = await fileToBody(files[i]); body.cardType = cardType;
           var out = await api(gen, { method:'POST', body: JSON.stringify(body) });
           if (out.res.status === 401){ btn.disabled = false; $('genBusy').classList.remove('on'); signOut(); return; }
-          if (out.res.ok && out.data.ok){ allCards = allCards.concat(out.data.cards || []); if (out.data.summary) summaries.push(out.data.summary); }
+          if (out.res.ok && out.data.ok){ allCards = allCards.concat(out.data.cards || []); if (out.data.summary) summaries.push(out.data.summary); if (out.data.source && out.data.source.truncated) anyTruncated = true; }
           else if (out.data.code === 'ai_limit' || out.data.code === 'needs_pro' || out.data.code === 'quota'){ btn.disabled = false; $('genBusy').classList.remove('on'); handleAiCode(out.data.code, out.data.error); return; }
           else { summaries.push(files[i].name + ': ' + (out.data.error || 'could not generate')); }
         }
@@ -1767,11 +1767,16 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
         }
         allCards = out1.data.cards || []; if (out1.data.summary) summaries.push(out1.data.summary);
         srcMeta = out1.data.source || {}; srcMeta.summary = out1.data.summary || '';
+        if (srcMeta.truncated) anyTruncated = true;
       }
       btn.disabled = false; $('genBusy').classList.remove('on');
       if (!allCards.length){ msgOn('genMsg', 'err', 'Could not make cards from that. Try adding more material.'); return; }
       track('ai_generation', { source: files.length ? 'file' : (url ? 'url' : 'text'), card_count: allCards.length, plan: currentPlan });
-      if (summaries.length){ var s = $('genSummary'); s.classList.remove('hidden'); s.textContent = 'Summary — ' + summaries.join('  •  '); }
+      if (summaries.length || anyTruncated){
+        var s = $('genSummary'); s.classList.remove('hidden');
+        var note = anyTruncated ? '⚠️ Large document — only the first ~60,000 characters (~25 pages) were used. ' : '';
+        s.textContent = note + (summaries.length ? 'Summary — ' + summaries.join('  •  ') : '');
+      }
       proposedSource = srcMeta;
       (sigs || []).forEach(function(s){ if (s) sigSeen[s] = true; }); // remember for the dup guard
       renderPreview(allCards);

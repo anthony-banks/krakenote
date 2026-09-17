@@ -110,6 +110,16 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   .an-stage-top .pct{color:var(--muted);font-size:12.5px;font-variant-numeric:tabular-nums;white-space:nowrap}
   .an-bar{height:26px;border-radius:8px;background:var(--surface-2);overflow:hidden}
   .an-bar > i{display:block;height:100%;border-radius:8px;background:linear-gradient(90deg,var(--cta),var(--accent));transition:width .4s ease}
+  .an-vs{padding:20px 22px}
+  .an-vs .bars{display:flex;align-items:flex-end;gap:5px;height:140px}
+  .an-vs .day{flex:1;min-width:6px;display:flex;align-items:flex-end;justify-content:center;gap:2px;height:100%}
+  .an-vs .day > i{width:46%;border-radius:3px 3px 0 0;min-height:1px}
+  .an-vs .day .v{background:color-mix(in srgb,var(--accent) 42%,var(--surface-2))}
+  .an-vs .day .s{background:var(--cta)}
+  .an-vs .xlab{display:flex;justify-content:space-between;color:var(--muted);font-size:11px;margin-top:8px;font-variant-numeric:tabular-nums}
+  .an-vs .legend{display:flex;gap:18px;margin-top:14px;font-size:12.5px;color:var(--muted)}
+  .an-vs .legend span{display:flex;align-items:center;gap:6px}
+  .an-vs .legend i{width:11px;height:11px;border-radius:3px;display:inline-block}
   .an-trend{padding:20px 22px}
   .an-trend .bars{display:flex;align-items:flex-end;gap:3px;height:120px}
   .an-trend .bars > i{flex:1;min-width:2px;background:linear-gradient(180deg,var(--accent),var(--cta));border-radius:3px 3px 0 0;opacity:.85}
@@ -167,6 +177,18 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
         <button id="anRefresh" class="linkbtn" type="button">↻ Refresh</button>
       </div>
     </div>
+    <!-- Top-line: visits → sign-ups -->
+    <div class="cards">
+      <div class="card"><div class="label">Visits</div><div class="big" id="anVisits">—</div><div class="hint">landing-page views</div></div>
+      <div class="card"><div class="label">Sign-ups</div><div class="big" id="anSignups2">—</div><div class="hint">new accounts</div></div>
+      <div class="card"><div class="label">Sign-up rate</div><div class="big" id="anRate">—</div><div class="hint">sign-ups ÷ visits</div></div>
+    </div>
+    <div class="panel" style="margin-top:14px">
+      <div class="panel-head"><h2>Visits &amp; sign-ups</h2><span class="hint" style="margin:0">per day</span></div>
+      <div id="anVsChart" class="an-vs"><p style="color:var(--muted);padding:20px 22px">Loading…</p></div>
+    </div>
+
+    <div class="head-row" style="margin-top:40px"><h2 style="font-size:20px">Engagement</h2></div>
     <div class="cards">
       <div class="card"><div class="label">Active users</div><div class="big" id="anUsers">—</div><div class="hint">with any event</div></div>
       <div class="card"><div class="label">Signups</div><div class="big" id="anSignups">—</div><div class="hint">new accounts</div></div>
@@ -441,6 +463,12 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     $('anUpgrades').textContent = (f.upgrade_completed || 0).toLocaleString();
     $('anLimit').textContent = (f.ai_limit_hit || 0).toLocaleString();
 
+    // Top-line: visits → sign-ups
+    var visits = d.visits || 0, signups = f.signed_up || 0;
+    $('anVisits').textContent = visits.toLocaleString();
+    $('anSignups2').textContent = signups.toLocaleString();
+    $('anRate').textContent = visits ? ((signups / visits) * 100).toFixed(1) + '%' : '—';
+
     var stages = [
       { k: 'Active users', v: f.active_users || 0 },
       { k: 'Used AI', v: f.used_ai_users || 0 },
@@ -462,6 +490,19 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       $('anTrend').innerHTML = '<div class="bars">' + bars + '</div><div class="xlab"><span>' + esc(daily[0].day) + '</span><span>' + esc(daily[daily.length-1].day) + '</span></div>';
     } else {
       $('anTrend').innerHTML = '<p style="color:var(--muted)">No events in this range yet.</p>';
+    }
+
+    // Visits vs sign-ups per day (grouped bars, scaled to the bigger of the two)
+    if (daily.length){
+      var maxVS = daily.reduce(function(m, x){ return Math.max(m, x.visits || 0, x.signed_up || 0); }, 1);
+      var vs = daily.map(function(x){
+        var vh = x.visits ? Math.max(Math.round((x.visits / maxVS) * 100), 2) : 0;
+        var sh = x.signed_up ? Math.max(Math.round((x.signed_up / maxVS) * 100), 2) : 0;
+        return '<div class="day" title="' + esc(x.day) + ': ' + (x.visits||0) + ' visits · ' + (x.signed_up||0) + ' sign-ups"><i class="v" style="height:' + vh + '%"></i><i class="s" style="height:' + sh + '%"></i></div>';
+      }).join('');
+      $('anVsChart').innerHTML = '<div class="bars">' + vs + '</div><div class="xlab"><span>' + esc(daily[0].day) + '</span><span>' + esc(daily[daily.length-1].day) + '</span></div><div class="legend"><span><i class="v"></i>Visits</span><span><i class="s"></i>Sign-ups</span></div>';
+    } else {
+      $('anVsChart').innerHTML = '<p style="color:var(--muted);padding:0 22px 8px">No visits in this range yet.</p>';
     }
 
     var pk = Object.keys(plat), pmax = pk.reduce(function(m, k){ return Math.max(m, plat[k]); }, 1);

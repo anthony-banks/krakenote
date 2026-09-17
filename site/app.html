@@ -311,6 +311,12 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   .acct-h{font-family:var(--head);font-weight:700;font-size:15px;margin-bottom:10px}
   .acct-body input{width:100%;font-family:var(--body);font-size:15px;padding:12px 14px;border-radius:12px;border:1.5px solid var(--border);background:var(--surface-2);color:var(--text);outline:none;margin-bottom:12px}
   .acct-body input:focus{border-color:var(--accent)}
+  .fb-lead{color:var(--muted);font-size:13.5px;margin-bottom:12px}
+  .fb-seg{display:inline-flex;gap:4px;background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:4px;margin-bottom:12px}
+  .fb-seg-btn{font-family:var(--body);font-size:13.5px;font-weight:600;color:var(--muted);background:none;border:0;padding:7px 14px;border-radius:9px;cursor:pointer}
+  .fb-seg-btn.active{background:var(--surface);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+  .acct-body textarea{width:100%;font-family:var(--body);font-size:15px;line-height:1.5;padding:12px 14px;border-radius:12px;border:1.5px solid var(--border);background:var(--surface-2);color:var(--text);outline:none;margin-bottom:12px;resize:vertical;min-height:76px}
+  .acct-body textarea:focus{border-color:var(--accent)}
   .billing-card{background:var(--surface-2);border:1px solid var(--border);border-radius:14px;padding:16px}
   .billing-plan{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
   .billing-plan strong{font-family:var(--head);font-size:15px}
@@ -727,6 +733,16 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
         <div class="acct-sep"></div>
         <h3 class="acct-h">Billing &amp; subscription</h3>
         <div id="billingCard" class="billing-card"></div>
+        <div class="acct-sep"></div>
+        <h3 class="acct-h">Send feedback</h3>
+        <p class="fb-lead">Found a bug or have an idea? We read every one.</p>
+        <div class="fb-seg" role="tablist">
+          <button type="button" class="fb-seg-btn active" data-kind="idea">💡 Idea</button>
+          <button type="button" class="fb-seg-btn" data-kind="bug">🐞 Bug</button>
+        </div>
+        <textarea id="fbMsg" rows="3" maxlength="4000" placeholder="Tell us what's on your mind…"></textarea>
+        <div class="msg" id="fbFormMsg"></div>
+        <button class="btn btn-primary" id="fbSendBtn" type="button">Send feedback</button>
         <div class="acct-sep"></div>
         <div class="ios-soon">
           <span class="emoji">📱</span>
@@ -2960,6 +2976,19 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     if (!out.res.ok || !out.data.ok){ msgOn('acctNameMsg', 'err', out.data.error || 'Could not save your name.'); return; }
     msgOn('acctNameMsg', 'ok', 'Saved.');
   }
+  var fbKind = 'idea';
+  async function sendFeedback(){
+    var msg = ($('fbMsg').value || '').trim();
+    if (msg.length < 2){ msgOn('fbFormMsg', 'err', 'Please add a little more detail.'); return; }
+    var btn = $('fbSendBtn'); btn.disabled = true;
+    var out = await api('/api/feedback', { method:'POST', body: JSON.stringify({ kind: fbKind, message: msg, page: location.pathname }) });
+    btn.disabled = false;
+    if (out.res.status === 401){ signOut(); return; }
+    if (!out.res.ok || !out.data.ok){ msgOn('fbFormMsg', 'err', out.data.error || 'Could not send your feedback.'); return; }
+    $('fbMsg').value = '';
+    msgOn('fbFormMsg', 'ok', 'Thanks — got it! 🐙');
+    track('feedback_sent', { kind: fbKind });
+  }
   async function changePassword(){
     var pw = $('acctPw').value || '';
     if (pw.length < 8){ msgOn('acctMsg', 'err', 'Password must be at least 8 characters.'); return; }
@@ -3087,6 +3116,13 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   $('importCsvBtn').addEventListener('click', function(){ $('csvFile').click(); });
   $('csvFile').addEventListener('change', function(){ var f = $('csvFile').files && $('csvFile').files[0]; if (f) importCsv(f); $('csvFile').value = ''; });
   $('acctNameBtn').addEventListener('click', saveName);
+  $('fbSendBtn').addEventListener('click', sendFeedback);
+  Array.prototype.forEach.call(document.querySelectorAll('.fb-seg-btn'), function(b){
+    b.addEventListener('click', function(){
+      fbKind = b.getAttribute('data-kind');
+      Array.prototype.forEach.call(document.querySelectorAll('.fb-seg-btn'), function(x){ x.classList.toggle('active', x === b); });
+    });
+  });
   // Fact-check modal
   $('factClose').addEventListener('click', function(){ $('factModal').classList.add('hidden'); });
   $('factApply').addEventListener('click', function(){

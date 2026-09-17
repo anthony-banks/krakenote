@@ -272,6 +272,24 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
         </table>
       </div>
     </div>
+
+    <div class="panel" style="margin-top:24px">
+      <div class="panel-head">
+        <h2>Feedback &amp; bug reports</h2>
+        <button id="fbRefresh" class="linkbtn" type="button">↻ Refresh</button>
+      </div>
+      <div id="fbState" class="state">
+        <span class="emoji">🐙</span><h3>Loading…</h3><p>Fetching feedback.</p>
+      </div>
+      <div id="fbWrap" class="table-scroll hidden">
+        <table>
+          <thead>
+            <tr><th>Type</th><th>Message</th><th>From</th><th>When</th><th>Status</th><th></th></tr>
+          </thead>
+          <tbody id="fbRows"></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 </main>
 
@@ -399,11 +417,85 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     } catch (ex){ btn.disabled = false; alert('Network error.'); }
   }
 
+  // ── Feedback & bug reports ──
+  function fbState(emoji, title, sub){
+    var s = $('fbState'); s.classList.remove('hidden'); $('fbWrap').classList.add('hidden');
+    s.innerHTML = '<span class="emoji">' + emoji + '</span><h3>' + esc(title) + '</h3><p>' + esc(sub) + '</p>';
+  }
+  async function loadFeedback(){
+    if (!getToken()) return;
+    fbState('🐙', 'Loading…', 'Fetching feedback.');
+    try {
+      var res = await fetch('/api/admin/feedback', { headers: authHeaders(), cache: 'no-store' });
+      if (res.status === 401){ clearToken(); showLogin('Your session expired. Please sign in again.'); return; }
+      if (!res.ok){ fbState('⚠️', 'Something went wrong', 'Could not load feedback (HTTP ' + res.status + ').'); return; }
+      var data = await res.json();
+      renderFeedback(data.feedback || []);
+    } catch (ex){ fbState('⚠️', 'Network error', 'Could not reach the server.'); }
+  }
+  function renderFeedback(items){
+    if (!items.length){ fbState('💬', 'No feedback yet', 'Bug reports and ideas from users will appear here.'); return; }
+    var tb = $('fbRows'); tb.innerHTML = '';
+    items.forEach(function(f){
+      var tr = document.createElement('tr');
+      var type = document.createElement('td');
+      var tag = document.createElement('span'); tag.className = 'tag';
+      tag.textContent = f.kind === 'bug' ? '🐞 Bug' : '💡 Idea'; type.appendChild(tag);
+      var msg = document.createElement('td'); msg.style.maxWidth = '360px'; msg.style.whiteSpace = 'pre-wrap'; msg.textContent = f.message;
+      var from = document.createElement('td'); from.className = 'email'; from.textContent = f.email || '—';
+      var when = document.createElement('td'); when.textContent = fmtDate(f.created_at);
+      var st = document.createElement('td');
+      if (f.linear_url){
+        var a = document.createElement('a'); a.href = f.linear_url; a.target = '_blank'; a.rel = 'noopener';
+        a.textContent = f.linear_id || 'Linear'; a.style.color = 'var(--accent)'; st.appendChild(a);
+      } else { st.textContent = 'New'; st.style.color = 'var(--muted)'; }
+      var act = document.createElement('td'); act.style.whiteSpace = 'nowrap';
+      if (!f.linear_url){
+        var flag = document.createElement('button'); flag.type = 'button'; flag.className = 'btn btn-primary';
+        flag.style.fontSize = '13px'; flag.style.padding = '8px 14px'; flag.textContent = '⚑ Linear';
+        flag.addEventListener('click', function(){ flagFeedback(f.id, flag); });
+        act.appendChild(flag);
+      }
+      var del = document.createElement('button'); del.type = 'button'; del.className = 'linkbtn';
+      del.style.marginLeft = '10px'; del.style.color = 'var(--danger)'; del.textContent = 'Delete';
+      del.addEventListener('click', function(){ deleteFeedback(f.id, del); });
+      act.appendChild(del);
+      tr.appendChild(type); tr.appendChild(msg); tr.appendChild(from); tr.appendChild(when); tr.appendChild(st); tr.appendChild(act);
+      tb.appendChild(tr);
+    });
+    $('fbState').classList.add('hidden'); $('fbWrap').classList.remove('hidden');
+  }
+  async function flagFeedback(id, btn){
+    btn.disabled = true; btn.textContent = '…';
+    try {
+      var res = await fetch('/api/admin/feedback/' + encodeURIComponent(id) + '/linear', {
+        method: 'POST', headers: authHeaders(),
+      });
+      if (res.status === 401){ clearToken(); showLogin('Session expired. Sign in again.'); return; }
+      var d = await res.json().catch(function(){ return {}; });
+      if (!res.ok || !d.ok){ btn.disabled = false; btn.textContent = '⚑ Linear'; alert(d.error || 'Could not create the Linear ticket.'); return; }
+      await loadFeedback();
+    } catch (ex){ btn.disabled = false; btn.textContent = '⚑ Linear'; alert('Network error.'); }
+  }
+  async function deleteFeedback(id, btn){
+    if (!confirm('Delete this feedback item? This cannot be undone.')) return;
+    btn.disabled = true;
+    try {
+      var res = await fetch('/api/admin/feedback/' + encodeURIComponent(id), {
+        method: 'DELETE', headers: authHeaders(),
+      });
+      if (res.status === 401){ clearToken(); showLogin('Session expired. Sign in again.'); return; }
+      if (!res.ok){ btn.disabled = false; alert('Could not delete that item.'); return; }
+      await loadFeedback();
+    } catch (ex){ btn.disabled = false; alert('Network error.'); }
+  }
+
   async function loadData(){
     if (!getToken()){ showLogin(); return; }
     showDash();
     loadAnalytics();
     loadUsers();
+    loadFeedback();
     setState('🐙', 'Loading…', 'Fetching waitlist signups.');
     try {
       var res = await fetch('/api/admin/waitlist', { headers: authHeaders(), cache: 'no-store' });
@@ -541,6 +633,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   $('signout').addEventListener('click', function(){ clearToken(); try{ sessionStorage.removeItem('kn_admin_name'); }catch(e){} showLogin(); });
   $('refreshBtn').addEventListener('click', loadData);
   $('usersRefresh').addEventListener('click', loadUsers);
+  $('fbRefresh').addEventListener('click', loadFeedback);
   $('csvBtn').addEventListener('click', downloadCsv);
 
   // Boot

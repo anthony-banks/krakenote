@@ -1592,6 +1592,111 @@ app.get('/api/admin/analytics', requireSuperuser, async (req, res) => {
   return res.json({ ok: true, ...(data || {}) });
 });
 
+// ── Feedback / bug reports ──────────────────────────────────────────────────
+// Any signed-in user can submit a bug or an idea from the app. Admins read,
+// delete, or flag one into Linear from the dashboard.
+
+// User submits feedback. RLS enforces user_id = auth.uid() on insert.
+app.post('/api/feedback', requireUser, async (req, res) => {
+  const kind = req.body?.kind === 'bug' ? 'bug' : 'idea';
+  const message = String(req.body?.message || '').trim().slice(0, 4000);
+  const page = String(req.body?.page || '').trim().slice(0, 200) || null;
+  if (message.length < 2) {
+    return res.status(400).json({ ok: false, error: 'Please add a little more detail.' });
+  }
+  if (rateLimited('feedback:' + req.user.id, 6)) {
+    return res.status(429).json({ ok: false, error: 'Thanks! You’ve sent a few already — try again in a minute.' });
+  }
+  const { error } = await req.db.from('feedback').insert({
+    user_id: req.user.id,
+    email: req.user.email || null,
+    kind,
+    message,
+    page,
+  });
+  if (error) {
+    console.error('[feedback] insert failed:', error.message);
+    return res.status(500).json({ ok: false, error: 'Could not send your feedback. Please try again.' });
+  }
+  return res.json({ ok: true });
+});
+
+// Admin: list all feedback (service role bypasses RLS).
+app.get('/api/admin/feedback', requireSuperuser, async (_req, res) => {
+  const { data, error } = await supabase
+    .from('feedback')
+    .select('id, email, kind, message, page, status, linear_id, linear_url, created_at')
+    .order('created_at', { ascending: false })
+    .limit(500);
+  if (error) {
+    console.error('[admin] feedback query failed:', error.message);
+    return res.status(500).json({ ok: false, error: 'Failed to load feedback.' });
+  }
+  return res.json({ ok: true, feedback: data || [] });
+});
+
+// Admin: delete a single feedback item.
+app.delete('/api/admin/feedback/:id', requireSuperuser, async (req, res) => {
+  const { error } = await supabase.from('feedback').delete().eq('id', req.params.id);
+  if (error) {
+    console.error('[admin] feedback delete failed:', error.message);
+    return res.status(500).json({ ok: false, error: 'Could not delete that item.' });
+  }
+  return res.json({ ok: true });
+});
+
+// Admin: flag a feedback item into Linear as a ticket in the KRA team.
+const LINEAR_API_KEY = process.env.LINEAR_API_KEY;
+const LINEAR_TEAM_ID = process.env.LINEAR_TEAM_ID || '7afac938-c788-46e9-acbf-f6752e66bb2e';
+app.post('/api/admin/feedback/:id/linear', requireSuperuser, async (req, res) => {
+  if (!LINEAR_API_KEY) {
+    return res.status(503).json({ ok: false, error: 'Linear is not configured on the server.' });
+  }
+  const { data: item, error: readErr } = await supabase
+    .from('feedback')
+    .select('id, email, kind, message, page, linear_url')
+    .eq('id', req.params.id)
+    .maybeSingle();
+  if (readErr || !item) {
+    return res.status(404).json({ ok: false, error: 'That feedback item is gone.' });
+  }
+  if (item.linear_url) {
+    return res.json({ ok: true, url: item.linear_url, already: true });
+  }
+  const title = (item.kind === 'bug' ? '[Bug] ' : '[Idea] ') + item.message.slice(0, 80).replace(/\s+/g, ' ');
+  const description = [
+    item.message,
+    '',
+    '---',
+    '_From in-app feedback_',
+    item.email ? '- Reporter: ' + item.email : null,
+    item.page ? '- Page: ' + item.page : null,
+  ].filter(Boolean).join('\n');
+  const query = `mutation Create($input: IssueCreateInput!) {
+    issueCreate(input: $input) { success issue { identifier url } }
+  }`;
+  try {
+    const r = await fetch('https://api.linear.app/graphql', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: LINEAR_API_KEY },
+      body: JSON.stringify({ query, variables: { input: { teamId: LINEAR_TEAM_ID, title, description } } }),
+    });
+    const j = await r.json();
+    const issue = j?.data?.issueCreate?.issue;
+    if (!j?.data?.issueCreate?.success || !issue) {
+      console.error('[admin] linear create failed:', JSON.stringify(j?.errors || j));
+      return res.status(502).json({ ok: false, error: 'Linear rejected the ticket.' });
+    }
+    await supabase.from('feedback').update({
+      status: 'flagged', linear_id: issue.identifier, linear_url: issue.url,
+    }).eq('id', item.id);
+    return res.json({ ok: true, id: issue.identifier, url: issue.url });
+  } catch (ex) {
+    console.error('[admin] linear create error:', ex?.message);
+    return res.status(502).json({ ok: false, error: 'Could not reach Linear.' });
+  }
+});
+
 // Brand icons, served straight from brand/ so there is no duplicated copy to
 // drift. Rendered as CSS masks in the UI, since the source SVGs are a fixed navy.
 app.use('/icons', express.static(join(__dirname, '..', 'brand', 'icons'), { maxAge: '7d' }));

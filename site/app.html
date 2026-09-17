@@ -2212,11 +2212,23 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     // Already HTML — sanitize on load too, not just on save: a body written by
     // the mobile app or a direct API call never passed through the save-time
     // sanitizer, so trusting it here would be stored-XSS on open.
-    if (/<(b|strong|i|em|u|ul|ol|li|h[1-3]|p|div|br|a|span)\b/i.test(stored)) return ntSanitize(stored);
+    if (/<(b|strong|i|em|u|s|mark|ul|ol|li|h[1-3]|p|div|br|a|span)\b/i.test(stored)) return ntSanitize(stored);
     return ntMarkdown(stored); // markdown/plain → HTML
   }
   // Keep only a safe subset of tags/attrs from the contenteditable output.
-  var NT_ALLOWED = { B:1, STRONG:1, I:1, EM:1, U:1, UL:1, OL:1, LI:1, H1:1, H2:1, H3:1, P:1, BR:1, DIV:1, A:1 };
+  var NT_ALLOWED = { B:1, STRONG:1, I:1, EM:1, U:1, S:1, MARK:1, SPAN:1, UL:1, OL:1, LI:1, H1:1, H2:1, H3:1, P:1, BR:1, DIV:1, A:1 };
+  // Preserve a small, safe set of inline styles (text color, highlight, bold) so
+  // pasted/typed formatting survives the save→reload round-trip (KRA-114). Values
+  // are read from the browser-parsed CSSStyleDeclaration, so they can't carry
+  // script or url()/expression() — only normalized color/weight values.
+  function ntCleanStyle(el){
+    var out = '';
+    var skip = { '': 1, initial: 1, inherit: 1, transparent: 1, 'rgba(0, 0, 0, 0)': 1 };
+    var color = el.style.color; if (color && !skip[color]) out += 'color:' + color + ';';
+    var bg = el.style.backgroundColor; if (bg && !skip[bg]) out += 'background-color:' + bg + ';';
+    var fw = el.style.fontWeight; if (fw === 'bold' || parseInt(fw, 10) >= 600) out += 'font-weight:' + fw + ';';
+    return out;
+  }
   function ntSanitize(html){
     var root = document.createElement('div'); root.innerHTML = html || '';
     (function walk(node){
@@ -2227,9 +2239,13 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
             node.removeChild(c);
             return;
           }
-          Array.prototype.slice.call(c.attributes).forEach(function(a){
-            if (!(c.tagName === 'A' && a.name === 'href')) c.removeAttribute(a.name);
-          });
+          var href = c.tagName === 'A' ? c.getAttribute('href') : null;
+          var style = ntCleanStyle(c); // read before stripping attributes
+          Array.prototype.slice.call(c.attributes).forEach(function(a){ c.removeAttribute(a.name); });
+          if (href && /^(https?:|mailto:|\/|#)/i.test(href)) c.setAttribute('href', href);
+          if (style) c.setAttribute('style', style);
+          // A span that carries no surviving formatting is just noise — unwrap it.
+          if (c.tagName === 'SPAN' && !style){ while (c.firstChild) node.insertBefore(c.firstChild, c); node.removeChild(c); return; }
           walk(c);
         }
       });
@@ -2306,6 +2322,18 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   $('ntSearch').addEventListener('input', function(){ clearTimeout(ntSearchT); ntSearchT = setTimeout(loadNoteList, 200); });
   $('ntTitle').addEventListener('input', scheduleNoteSave);
   $('ntBody').addEventListener('input', scheduleNoteSave);
+  // Normalize paste so what appears in the editor is exactly what gets saved
+  // (run the clipboard HTML through the same sanitizer) — no "looked formatted,
+  // reloaded plain" surprise, and no pasted scripts/junk (KRA-114).
+  $('ntBody').addEventListener('paste', function(e){
+    var cb = e.clipboardData || window.clipboardData; if (!cb) return;
+    e.preventDefault();
+    var html = cb.getData('text/html');
+    var clean = html ? ntSanitize(html)
+      : escapeHtml(cb.getData('text/plain') || '').replace(/\r?\n/g, '<br>');
+    document.execCommand('insertHTML', false, clean);
+    scheduleNoteSave();
+  });
   $('ntMove').addEventListener('change', moveNote);
   $('ntDelete').addEventListener('click', deleteNote);
 

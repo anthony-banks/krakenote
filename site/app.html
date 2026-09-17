@@ -481,8 +481,10 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       #notesPanel{background:transparent;border:0;border-radius:0;overflow:visible}
       .nt-wrap{display:flex;gap:16px;min-height:70vh}
       /* Sticky so the notebook nav stays put while a long note scrolls the page
-         independently (KRA-121); scrolls internally if the nav itself is tall. */
-      .nt-side{width:290px;flex:none;display:flex;flex-direction:column;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:16px 14px;position:sticky;top:86px;align-self:flex-start;max-height:calc(100vh - 104px);overflow-y:auto}
+         independently (KRA-121). No overflow clip here — the inner note list
+         (.nt-notes) has its own scroll; clipping the whole card cut off the
+         "+" button's tooltip. */
+      .nt-side{width:290px;flex:none;display:flex;flex-direction:column;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:16px 14px;position:sticky;top:86px;align-self:flex-start}
       .nt-nbhead{display:flex;align-items:center;justify-content:space-between;font-family:var(--head);font-weight:700;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
       .nt-nbadd{background:none;border:0;color:var(--accent);font-size:20px;cursor:pointer;line-height:1;padding:2px 7px;border-radius:8px;transition:background .12s ease,color .12s ease}
       .nt-nbadd:hover{background:color-mix(in srgb,var(--accent) 15%,transparent)}
@@ -1444,6 +1446,8 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     if (from < 0 || to < 0) return;
     order.splice(to, 0, order.splice(from, 1)[0]);
     order.forEach(function(id, i){ var c = cardsCache.find(function(x){ return x.id === id; }); if (c) c.sort_order = i + 1; });
+    // Reordering only makes sense in a custom order — switch to it so the drag sticks.
+    cardSortMode = 'manual'; var sel = $('cardSort'); if (sel) sel.value = 'manual';
     renderCards();
     api('/api/decks/' + encodeURIComponent(currentDeck.id) + '/cards/reorder', { method:'POST', body: JSON.stringify({ orderedIds: order }) });
     dragCardId = null;
@@ -1524,23 +1528,23 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       badge.textContent = c.card_type === 'cloze' ? 'Cloze' : 'Basic';
       var actions = document.createElement('div'); actions.className = 'card-actions';
       var fc = mkCardAct('Fact-check', 'magnifier', false); fc.addEventListener('click', function(){ factCheckCard(c); });
-      var ed = mkCardAct('Edit', 'simplePenLogo', false); ed.addEventListener('click', function(){ openCardEditor(c); });
+      var ed = mkCardAct('Edit', 'edit', false); ed.addEventListener('click', function(){ openCardEditor(c); });
       var del = mkCardAct('Delete', 'bin', true); del.addEventListener('click', function(){ deleteCard(c); });
       actions.appendChild(fc); actions.appendChild(ed); actions.appendChild(del);
       head.appendChild(badge); head.appendChild(actions);
       var q = document.createElement('div'); q.className = 'q'; q.textContent = c.front;
       var a = document.createElement('div'); a.className = 'a'; a.textContent = c.back;
-      if (cardSortMode === 'manual'){
-        row.classList.add('draggable'); row.draggable = true;
-        var grip = document.createElement('span'); grip.className = 'card-grip'; grip.title = 'Drag to reorder';
-        grip.innerHTML = '<svg width="12" height="16" viewBox="0 0 12 16" aria-hidden="true"><g fill="currentColor"><circle cx="3.5" cy="3" r="1.4"/><circle cx="8.5" cy="3" r="1.4"/><circle cx="3.5" cy="8" r="1.4"/><circle cx="8.5" cy="8" r="1.4"/><circle cx="3.5" cy="13" r="1.4"/><circle cx="8.5" cy="13" r="1.4"/></g></svg>';
-        head.insertBefore(grip, head.firstChild);
-        row.addEventListener('dragstart', function(){ dragCardId = c.id; row.style.opacity = '0.5'; });
-        row.addEventListener('dragend', function(){ row.style.opacity = ''; });
-        row.addEventListener('dragover', function(e){ e.preventDefault(); row.classList.add('drag-over'); });
-        row.addEventListener('dragleave', function(){ row.classList.remove('drag-over'); });
-        row.addEventListener('drop', function(e){ e.preventDefault(); row.classList.remove('drag-over'); onCardDrop(c.id); });
-      }
+      // Always draggable + a visible grip so reordering is discoverable (KRA-126);
+      // dragging switches the deck to Custom order (see onCardDrop).
+      row.classList.add('draggable'); row.draggable = true;
+      var grip = document.createElement('span'); grip.className = 'card-grip'; grip.title = 'Drag to reorder';
+      grip.innerHTML = '<svg width="12" height="16" viewBox="0 0 12 16" aria-hidden="true"><g fill="currentColor"><circle cx="3.5" cy="3" r="1.4"/><circle cx="8.5" cy="3" r="1.4"/><circle cx="3.5" cy="8" r="1.4"/><circle cx="8.5" cy="8" r="1.4"/><circle cx="3.5" cy="13" r="1.4"/><circle cx="8.5" cy="13" r="1.4"/></g></svg>';
+      head.insertBefore(grip, head.firstChild);
+      row.addEventListener('dragstart', function(){ dragCardId = c.id; row.style.opacity = '0.5'; });
+      row.addEventListener('dragend', function(){ row.style.opacity = ''; });
+      row.addEventListener('dragover', function(e){ e.preventDefault(); row.classList.add('drag-over'); });
+      row.addEventListener('dragleave', function(){ row.classList.remove('drag-over'); });
+      row.addEventListener('drop', function(e){ e.preventDefault(); row.classList.remove('drag-over'); onCardDrop(c.id); });
       row.appendChild(head); row.appendChild(q); row.appendChild(a); list.appendChild(row);
     });
     mathify(list);

@@ -488,6 +488,11 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       .nt-nbhead{display:flex;align-items:center;justify-content:space-between;font-family:var(--head);font-weight:700;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
       .nt-nbadd{background:none;border:0;color:var(--accent);font-size:20px;cursor:pointer;line-height:1;padding:2px 7px;border-radius:8px;transition:background .12s ease,color .12s ease}
       .nt-nbadd:hover{background:color-mix(in srgb,var(--accent) 15%,transparent)}
+      .nt-nbsort{font-family:var(--body);font-size:11px;padding:3px 6px;border-radius:7px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer}
+      .nt-nbsort:focus{outline:none;border-color:var(--accent)}
+      .nt-starfilter{margin-top:8px;align-self:flex-start;font-family:var(--head);font-weight:600;font-size:12px;padding:5px 12px;border-radius:999px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;transition:background .12s ease,border-color .12s ease,color .12s ease}
+      .nt-starfilter:hover{border-color:var(--accent);color:var(--accent)}
+      .nt-starfilter.on{background:color-mix(in srgb,#f5b301 16%,transparent);border-color:#f5b301;color:#f5b301}
       .nt-nbs{display:flex;flex-direction:column;gap:2px}
       .nt-nb{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:8px 10px;border-radius:10px;cursor:pointer;color:var(--text);font-size:14px}
       .nt-nb:hover{background:var(--surface-2)}
@@ -544,11 +549,17 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     <div class="panel view-panel hidden" id="notesPanel">
       <div class="nt-wrap">
         <aside class="nt-side">
-          <div class="nt-nbhead"><span>Notebooks</span><button class="nt-nbadd" id="ntAddNb" title="New notebook">＋</button></div>
+          <div class="nt-nbhead"><span>Notebooks</span>
+            <span style="display:flex;align-items:center;gap:6px">
+              <select id="ntNbSort" class="nt-nbsort" title="Sort notebooks"><option value="recent">Recent</option><option value="az">A–Z</option></select>
+              <button class="nt-nbadd" id="ntAddNb" title="New notebook">＋</button>
+            </span>
+          </div>
           <div class="nt-nbs" id="ntNbList"></div>
           <button class="btn btn-primary nt-newnote" id="ntNewNote">＋ New note</button>
           <input id="ntSearch" type="search" placeholder="Search notes…" autocomplete="off"
             style="width:100%;box-sizing:border-box;margin-top:8px;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:transparent;color:var(--text);font-size:13px" />
+          <button id="ntStarFilter" class="nt-starfilter" type="button" aria-pressed="false">☆ Starred</button>
           <div class="nt-notes" id="ntNoteList"></div>
         </aside>
         <section class="nt-main" id="ntMain">
@@ -1980,6 +1991,8 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   var ntFilter = 'all';      // 'all' | 'none' | notebookId
   var ntCurrent = null;      // full loaded note {id,notebook_id,title,body,...}
   var ntSaveTimer = null;
+  var ntStarredOnly = false; // KRA-123: show only starred (pinned) notes
+  var nbSort = (function(){ try { return localStorage.getItem('kn_nb_sort') || 'recent'; } catch(e){ return 'recent'; } })(); // KRA-120
 
   function fmtNoteTime(iso){
     if (!iso) return '';
@@ -2029,6 +2042,12 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     var out = await api('/api/notebooks');
     if (out.res.status === 401){ signOut(); return; }
     ntNotebooks = (out.res.ok && out.data.ok) ? (out.data.notebooks || []) : [];
+    // KRA-118: brand-new users get a default "My Notebook" (renamable) so the
+    // notebook list is never an empty/confusing state.
+    if (out.res.ok && out.data.ok && !ntNotebooks.length){
+      var mk = await api('/api/notebooks', { method:'POST', body: JSON.stringify({ name: 'My Notebook' }) });
+      if (mk.res.ok && mk.data.ok) ntNotebooks = [mk.data.notebook];
+    }
     renderNotebooks();
     await loadNoteList();
     if (!ntCurrent) showNoteEditor(false);
@@ -2044,6 +2063,9 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       var right = document.createElement('span'); right.style.display = 'flex'; right.style.alignItems = 'center'; right.style.gap = '6px';
       if (count != null){ var c = document.createElement('span'); c.className = 'cnt'; c.textContent = count; right.appendChild(c); }
       if (deletable){
+        var rn = document.createElement('button'); rn.className = 'nbx'; rn.textContent = '✎'; rn.title = 'Rename notebook';
+        rn.addEventListener('click', function(e){ e.stopPropagation(); renameNotebook(id, label); });
+        right.appendChild(rn);
         var x = document.createElement('button'); x.className = 'nbx'; x.textContent = '✕'; x.title = 'Delete notebook';
         x.addEventListener('click', function(e){ e.stopPropagation(); deleteNotebook(id, label); });
         right.appendChild(x);
@@ -2054,7 +2076,9 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     }
     row('all', 'All notes', total, false);
     row('none', 'Unfiled', null, false);
-    ntNotebooks.forEach(function(nb){ row(nb.id, nb.name, nb.noteCount || 0, true); });
+    var nbs = ntNotebooks.slice();
+    if (nbSort === 'az') nbs.sort(function(a, b){ return (a.name || '').localeCompare(b.name || ''); }); // 'recent' = API order (newest first)
+    nbs.forEach(function(nb){ row(nb.id, nb.name, nb.noteCount || 0, true); });
     // Keep the editor's "move to" dropdown in sync.
     var mv = $('ntMove');
     if (mv){
@@ -2063,6 +2087,18 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       ntNotebooks.forEach(function(nb){ var o = document.createElement('option'); o.value = nb.id; o.textContent = nb.name; mv.appendChild(o); });
       if (ntCurrent) mv.value = ntCurrent.notebook_id || '';
     }
+  }
+
+  async function renameNotebook(id, current){
+    showPrompt('Rename notebook', { placeholder: 'Notebook name', okLabel: 'Save', value: current }, async function(name){
+      name = (name || '').trim(); if (!name) return;
+      var out = await api('/api/notebooks/' + encodeURIComponent(id), { method:'PATCH', body: JSON.stringify({ name: name }) });
+      if (out.res.status === 401){ signOut(); return; }
+      if (out.res.ok && out.data.ok){
+        var nb = ntNotebooks.find(function(x){ return x.id === id; }); if (nb) nb.name = name;
+        renderNotebooks();
+      } else { toast('err', 'Could not rename the notebook.'); }
+    });
   }
 
   async function loadNoteList(){
@@ -2078,12 +2114,13 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
 
   function renderNoteList(){
     var wrap = $('ntNoteList'); wrap.innerHTML = '';
-    if (!ntNotes.length){
+    var items = ntStarredOnly ? ntNotes.filter(function(n){ return n.pinned; }) : ntNotes; // KRA-123
+    if (!items.length){
       var e = document.createElement('div'); e.style.color = 'var(--muted)'; e.style.fontSize = '13px'; e.style.padding = '10px 4px';
       var sEl = $('ntSearch'); var searching = sEl && sEl.value.trim();
-      e.textContent = searching ? 'No notes match your search.' : 'No notes here yet.'; wrap.appendChild(e); return;
+      e.textContent = ntStarredOnly ? 'No starred notes yet.' : (searching ? 'No notes match your search.' : 'No notes here yet.'); wrap.appendChild(e); return;
     }
-    ntNotes.forEach(function(n){
+    items.forEach(function(n){
       var it = document.createElement('div'); it.className = 'nt-item' + (ntCurrent && ntCurrent.id === n.id ? ' active' : '');
       it.setAttribute('role', 'button'); it.tabIndex = 0;
       var t = document.createElement('div'); t.className = 't'; t.textContent = n.title || 'Untitled';
@@ -2131,7 +2168,10 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   }
 
   async function createNote(){
-    var notebookId = (ntFilter !== 'all' && ntFilter !== 'none') ? ntFilter : '';
+    // KRA-118: file the note into the selected notebook; in "All notes" fall back
+    // to the default (first) notebook so it isn't left unfiled. "Unfiled" stays unfiled.
+    var notebookId = ntFilter === 'none' ? ''
+      : (ntFilter !== 'all' ? ntFilter : (ntNotebooks[0] ? ntNotebooks[0].id : ''));
     var out = await api('/api/notes', { method:'POST', body: JSON.stringify({ title:'', body:'', notebookId: notebookId }) });
     if (out.res.status === 401){ signOut(); return; }
     if (!out.res.ok || !out.data.ok){ return; }
@@ -2248,6 +2288,20 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   $('ntNewNote').addEventListener('click', createNote);
   $('ntEmptyNew').addEventListener('click', createNote);
   $('ntAddNb').addEventListener('click', addNotebook);
+  // Notebook sort (KRA-120)
+  $('ntNbSort').value = nbSort;
+  $('ntNbSort').addEventListener('change', function(){
+    nbSort = this.value; try { localStorage.setItem('kn_nb_sort', nbSort); } catch(e){}
+    renderNotebooks();
+  });
+  // Starred-only filter (KRA-123)
+  $('ntStarFilter').addEventListener('click', function(){
+    ntStarredOnly = !ntStarredOnly;
+    this.classList.toggle('on', ntStarredOnly);
+    this.textContent = (ntStarredOnly ? '★' : '☆') + ' Starred';
+    this.setAttribute('aria-pressed', ntStarredOnly ? 'true' : 'false');
+    renderNoteList();
+  });
   var ntSearchT;
   $('ntSearch').addEventListener('input', function(){ clearTimeout(ntSearchT); ntSearchT = setTimeout(loadNoteList, 200); });
   $('ntTitle').addEventListener('input', scheduleNoteSave);

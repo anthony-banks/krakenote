@@ -663,10 +663,12 @@ async function buildIngest(body) {
   const text = typeof body.text === 'string' ? body.text : '';
   const url = typeof body.url === 'string' ? body.url.trim() : '';
 
+  const CAP = 60000; // ~25 pages; extracted text beyond this is dropped (KRA-140)
   const asText = (raw, kind, filename) => {
-    const clean = (raw || '').slice(0, 60000).trim();
+    const full = raw || '';
+    const clean = full.slice(0, CAP).trim();
     if (!clean) throw new Error('There was nothing to generate from.');
-    return { userContent: [{ type: 'text', text: 'Study material:\n\n' + clean }], sourceKind: kind, filename, charCount: clean.length };
+    return { userContent: [{ type: 'text', text: 'Study material:\n\n' + clean }], sourceKind: kind, filename, charCount: clean.length, truncated: full.length > CAP };
   };
 
   if (file && file.dataBase64) {
@@ -736,9 +738,9 @@ app.post('/api/decks/:id/generate', requireUser, async (req, res) => {
   if (deckErr) return res.status(500).json({ ok: false, error: 'Could not verify the deck. Please try again.' });
   if (!deck) return res.status(404).json({ ok: false, error: 'Deck not found.' });
 
-  let userContent, sourceKind, filename, charCount;
+  let userContent, sourceKind, filename, charCount, truncated;
   try {
-    ({ userContent, sourceKind, filename, charCount } = await buildIngest(req.body || {}));
+    ({ userContent, sourceKind, filename, charCount, truncated } = await buildIngest(req.body || {}));
   } catch (ex) {
     return res.status(400).json({ ok: false, error: ex.message || 'Could not read that input.' });
   }
@@ -798,7 +800,7 @@ app.post('/api/decks/:id/generate', requireUser, async (req, res) => {
     ok: true,
     summary,
     cards,
-    source: { kind: sourceKind, filename, charCount },
+    source: { kind: sourceKind, filename, charCount, truncated: !!truncated },
   });
 });
 

@@ -1357,6 +1357,32 @@ app.delete('/api/notes/:id', requireUser, async (req, res) => {
   return res.json({ ok: true });
 });
 
+// ── Bulk delete (multi-select, KRA-85) ──────────────────────────────────────
+// One round-trip to delete N items. Ownership is enforced by RLS on req.db —
+// .in('id', ids) can only match rows the caller owns, so foreign ids are no-ops.
+// Deleting a deck cascades to its cards via the FK; cards are scoped to a deck.
+function bulkIds(body) {
+  const ids = Array.isArray(body?.ids) ? body.ids : [];
+  return ids.filter((x) => typeof x === 'string' && x).slice(0, 200);
+}
+async function bulkDelete(res, db, table, ids, extra) {
+  if (!ids.length) return res.status(400).json({ ok: false, error: 'No items selected.' });
+  let q = db.from(table).delete().in('id', ids);
+  if (extra) q = q.eq(extra.col, extra.val);
+  const { error } = await q;
+  if (error) {
+    console.error(`[${table}] bulk delete failed:`, error.message);
+    return res.status(500).json({ ok: false, error: 'Could not delete the selected items.' });
+  }
+  return res.json({ ok: true, deleted: ids.length });
+}
+app.post('/api/notes/bulk-delete', requireUser, (req, res) =>
+  bulkDelete(res, req.db, 'notes', bulkIds(req.body)));
+app.post('/api/decks/bulk-delete', requireUser, (req, res) =>
+  bulkDelete(res, req.db, 'decks', bulkIds(req.body)));
+app.post('/api/decks/:id/cards/bulk-delete', requireUser, (req, res) =>
+  bulkDelete(res, req.db, 'cards', bulkIds(req.body), { col: 'deck_id', val: req.params.id }));
+
 // ── Billing: RevenueCat webhook ─────────────────────────────────────────────
 // RevenueCat is the entitlement source of truth across iOS (Apple IAP) and web
 // (Stripe). It POSTs subscription events here; we map them to profiles.plan.

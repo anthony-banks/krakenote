@@ -590,6 +590,15 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       .note-pick-item small{color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
       .nt-body u{text-decoration:underline}
       .nt-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--muted);text-align:center;gap:6px}
+      /* Bulk multi-select (KRA-85) */
+      .btn-danger{background:var(--danger);color:#fff;border:0}
+      .btn-danger:disabled{opacity:.5;cursor:not-allowed}
+      .bulk-bar{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:60;display:flex;align-items:center;gap:18px;background:var(--surface);border:1px solid var(--border);box-shadow:0 12px 34px rgba(0,0,0,.28);border-radius:14px;padding:10px 16px;font-size:14px}
+      .bulk-bar-actions{display:flex;align-items:center;gap:10px}
+      .bulk-sel{width:18px;height:18px;flex:none;margin-right:4px;accent-color:var(--cta);cursor:pointer}
+      .selecting .nt-item,.selecting .deck-row,.selecting .card-row{cursor:pointer}
+      .nt-item.sel,.deck-row.sel,.card-row.sel{outline:2px solid var(--cta);outline-offset:-2px;border-radius:10px}
+      .btn-select.on{color:var(--cta)}
       @media(max-width:760px){.nt-wrap{flex-direction:column}.nt-side{width:auto}.nt-notes{max-height:34vh}}
     </style>
     <div class="panel view-panel hidden" id="notesPanel">
@@ -605,7 +614,10 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
           <button class="btn btn-primary nt-newnote" id="ntNewNote">＋ New note</button>
           <input id="ntSearch" type="search" placeholder="Search notes…" autocomplete="off"
             style="width:100%;box-sizing:border-box;margin-top:8px;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:transparent;color:var(--text);font-size:13px" />
-          <button id="ntStarFilter" class="nt-starfilter" type="button" aria-pressed="false">☆ Starred</button>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button id="ntStarFilter" class="nt-starfilter" type="button" aria-pressed="false" style="flex:1">☆ Starred</button>
+            <button id="selNotes" class="linkbtn btn-select" type="button" style="font-size:13px" title="Select multiple notes">Select</button>
+          </div>
           <div class="nt-notes" id="ntNoteList"></div>
         </aside>
         <section class="nt-main" id="ntMain">
@@ -755,7 +767,8 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       <div class="panel-head">
         <i class="ic" style="--i:url(/icons/list.svg)"></i>
         <h2>Your decks</h2>
-        <button class="btn btn-primary" id="newDeckBtn" type="button" style="margin-left:auto">+ New deck</button>
+        <button id="selDecks" class="linkbtn btn-select" type="button" style="margin-left:auto;font-size:13px" title="Select multiple decks">Select</button>
+        <button class="btn btn-primary" id="newDeckBtn" type="button">+ New deck</button>
       </div>
 
       <div class="deck-form hidden" id="deckForm">
@@ -826,6 +839,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       </div>
       <div class="cards-toolbar hidden" id="cardsToolbar">
         <button class="btn btn-primary" id="addCardBtn" type="button">+ Add card</button>
+        <button class="linkbtn btn-select" id="selCards" type="button" title="Select multiple cards">Select</button>
         <button class="linkbtn" id="importCsvBtn" type="button">Import CSV</button>
         <button class="linkbtn" id="exportCsvBtn" type="button">Export CSV</button>
         <input type="file" id="csvFile" accept=".csv,text/csv" style="display:none" />
@@ -998,6 +1012,15 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   </div>
 </div>
 
+<!-- Bulk-select action bar (KRA-85): appears when multi-select is active. -->
+<div class="bulk-bar hidden" id="bulkBar">
+  <span id="bulkCount">0 selected</span>
+  <div class="bulk-bar-actions">
+    <button class="linkbtn" id="bulkCancel" type="button">Cancel</button>
+    <button class="btn btn-danger" id="bulkDelete" type="button">Delete</button>
+  </div>
+</div>
+
 <script src="/vendor/supabase.js"></script>
 <script src="/js/note-format.js"></script>
 <script>
@@ -1139,6 +1162,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   function renderView(key){
     // Swap panels inside a View Transition for a smooth crossfade where supported;
     // falls back to an instant swap otherwise (progressive enhancement).
+    if (bulk.kind) bulkCancel(); // don't let multi-select leak across views (KRA-85)
     var swap = function(){
       currentView = key;
       var v = VIEWS[key] || VIEWS.home;
@@ -1324,22 +1348,27 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     }
     $('decksState').classList.add('hidden');
     list.innerHTML = '';
+    var selecting = bulkActive('decks');
     decksCache.forEach(function(d){
       var row = document.createElement('div'); row.className = 'deck-row';
+      if (selecting) row.appendChild(bulkCheckbox(d.id, row));
       var main = document.createElement('div'); main.className = 'deck-main';
-      main.addEventListener('click', function(){ openDeck(d); });
+      main.addEventListener('click', function(){ if (selecting){ bulkToggle(d.id); row.classList.toggle('sel', bulkIsSel(d.id)); var c = row.querySelector('.bulk-sel'); if (c) c.checked = bulkIsSel(d.id); } else openDeck(d); });
       var t = document.createElement('div'); t.className = 'deck-title'; t.textContent = d.title;
       var meta = document.createElement('div'); meta.className = 'deck-meta';
       var n = d.cardCount || 0;
       meta.textContent = (d.subject ? d.subject + ' · ' : '') + n + ' card' + (n === 1 ? '' : 's');
       main.appendChild(t); main.appendChild(meta);
-      var pin = document.createElement('button'); pin.className = 'deckpin' + (d.pinned ? ' on' : ''); pin.type = 'button';
-      pin.textContent = d.pinned ? '★' : '☆';
-      pin.title = d.pinned ? 'Unpin' : 'Pin to top'; pin.setAttribute('aria-label', pin.title + ' ' + d.title);
-      pin.addEventListener('click', function(e){ e.stopPropagation(); toggleDeckPin(d); });
-      var del = document.createElement('button'); del.className = 'linkbtn'; del.type = 'button'; del.textContent = 'Delete';
-      del.addEventListener('click', function(){ deleteDeck(d); });
-      row.appendChild(main); row.appendChild(pin); row.appendChild(del);
+      row.appendChild(main);
+      if (!selecting){
+        var pin = document.createElement('button'); pin.className = 'deckpin' + (d.pinned ? ' on' : ''); pin.type = 'button';
+        pin.textContent = d.pinned ? '★' : '☆';
+        pin.title = d.pinned ? 'Unpin' : 'Pin to top'; pin.setAttribute('aria-label', pin.title + ' ' + d.title);
+        pin.addEventListener('click', function(e){ e.stopPropagation(); toggleDeckPin(d); });
+        var del = document.createElement('button'); del.className = 'linkbtn'; del.type = 'button'; del.textContent = 'Delete';
+        del.addEventListener('click', function(){ deleteDeck(d); });
+        row.appendChild(pin); row.appendChild(del);
+      }
       list.appendChild(row);
     });
   }
@@ -1544,6 +1573,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   }
 
   async function openDeck(d){
+    if (bulk.kind) bulkCancel(); // clear any list selection when entering a deck (KRA-85)
     currentDeck = d;
     currentView = 'decks';
     setActiveNav('decks');
@@ -1665,30 +1695,38 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     }
     $('cardsState').classList.add('hidden');
     list.innerHTML = '';
+    var selecting = bulkActive('cards');
     sortedCards().forEach(function(c){
       var row = document.createElement('div'); row.className = 'card-row';
       var head = document.createElement('div'); head.className = 'card-row-head';
       var badge = document.createElement('span'); badge.className = 'card-badge ' + (c.card_type || 'basic');
       badge.textContent = c.card_type === 'cloze' ? 'Cloze' : 'Basic';
-      var actions = document.createElement('div'); actions.className = 'card-actions';
-      var fc = mkCardAct('Fact-check', 'magnifier', false); fc.addEventListener('click', function(){ factCheckCard(c); });
-      var ed = mkCardAct('Edit', 'edit', false); ed.addEventListener('click', function(){ openCardEditor(c); });
-      var del = mkCardAct('Delete', 'bin', true); del.addEventListener('click', function(){ deleteCard(c); });
-      actions.appendChild(fc); actions.appendChild(ed); actions.appendChild(del);
-      head.appendChild(badge); head.appendChild(actions);
+      head.appendChild(badge);
+      if (selecting){
+        head.insertBefore(bulkCheckbox(c.id, row), head.firstChild);
+        row.addEventListener('click', function(){ bulkToggle(c.id); row.classList.toggle('sel', bulkIsSel(c.id)); var cb = row.querySelector('.bulk-sel'); if (cb) cb.checked = bulkIsSel(c.id); });
+      } else {
+        var actions = document.createElement('div'); actions.className = 'card-actions';
+        var fc = mkCardAct('Fact-check', 'magnifier', false); fc.addEventListener('click', function(){ factCheckCard(c); });
+        var ed = mkCardAct('Edit', 'edit', false); ed.addEventListener('click', function(){ openCardEditor(c); });
+        var del = mkCardAct('Delete', 'bin', true); del.addEventListener('click', function(){ deleteCard(c); });
+        actions.appendChild(fc); actions.appendChild(ed); actions.appendChild(del);
+        head.appendChild(actions);
+        // Always draggable + a visible grip so reordering is discoverable (KRA-126);
+        // dragging switches the deck to Custom order (see onCardDrop). Disabled while
+        // multi-selecting so a drag can't fight a selection tap.
+        row.classList.add('draggable'); row.draggable = true;
+        var grip = document.createElement('span'); grip.className = 'card-grip'; grip.title = 'Drag to reorder';
+        grip.innerHTML = '<svg width="12" height="16" viewBox="0 0 12 16" aria-hidden="true"><g fill="currentColor"><circle cx="3.5" cy="3" r="1.4"/><circle cx="8.5" cy="3" r="1.4"/><circle cx="3.5" cy="8" r="1.4"/><circle cx="8.5" cy="8" r="1.4"/><circle cx="3.5" cy="13" r="1.4"/><circle cx="8.5" cy="13" r="1.4"/></g></svg>';
+        head.insertBefore(grip, head.firstChild);
+        row.addEventListener('dragstart', function(){ dragCardId = c.id; row.style.opacity = '0.5'; });
+        row.addEventListener('dragend', function(){ row.style.opacity = ''; });
+        row.addEventListener('dragover', function(e){ e.preventDefault(); row.classList.add('drag-over'); });
+        row.addEventListener('dragleave', function(){ row.classList.remove('drag-over'); });
+        row.addEventListener('drop', function(e){ e.preventDefault(); row.classList.remove('drag-over'); onCardDrop(c.id); });
+      }
       var q = document.createElement('div'); q.className = 'q'; q.textContent = c.front;
       var a = document.createElement('div'); a.className = 'a'; a.textContent = c.back;
-      // Always draggable + a visible grip so reordering is discoverable (KRA-126);
-      // dragging switches the deck to Custom order (see onCardDrop).
-      row.classList.add('draggable'); row.draggable = true;
-      var grip = document.createElement('span'); grip.className = 'card-grip'; grip.title = 'Drag to reorder';
-      grip.innerHTML = '<svg width="12" height="16" viewBox="0 0 12 16" aria-hidden="true"><g fill="currentColor"><circle cx="3.5" cy="3" r="1.4"/><circle cx="8.5" cy="3" r="1.4"/><circle cx="3.5" cy="8" r="1.4"/><circle cx="8.5" cy="8" r="1.4"/><circle cx="3.5" cy="13" r="1.4"/><circle cx="8.5" cy="13" r="1.4"/></g></svg>';
-      head.insertBefore(grip, head.firstChild);
-      row.addEventListener('dragstart', function(){ dragCardId = c.id; row.style.opacity = '0.5'; });
-      row.addEventListener('dragend', function(){ row.style.opacity = ''; });
-      row.addEventListener('dragover', function(e){ e.preventDefault(); row.classList.add('drag-over'); });
-      row.addEventListener('dragleave', function(){ row.classList.remove('drag-over'); });
-      row.addEventListener('drop', function(e){ e.preventDefault(); row.classList.remove('drag-over'); onCardDrop(c.id); });
       row.appendChild(head); row.appendChild(q); row.appendChild(a); list.appendChild(row);
     });
     mathify(list);
@@ -2268,24 +2306,29 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       var sEl = $('ntSearch'); var searching = sEl && sEl.value.trim();
       e.textContent = ntStarredOnly ? 'No starred notes yet.' : (searching ? 'No notes match your search.' : 'No notes here yet.'); wrap.appendChild(e); return;
     }
+    var selecting = bulkActive('notes');
     items.forEach(function(n){
       var it = document.createElement('div'); it.className = 'nt-item' + (ntCurrent && ntCurrent.id === n.id ? ' active' : '');
       it.setAttribute('role', 'button'); it.tabIndex = 0;
+      if (selecting) it.appendChild(bulkCheckbox(n.id, it));
       var t = document.createElement('div'); t.className = 't'; t.textContent = n.title || 'Untitled';
       var s = document.createElement('div'); s.className = 's'; s.textContent = n.snippet || 'No additional text';
       var d = document.createElement('div'); d.className = 'd'; d.textContent = fmtNoteTime(n.updated_at);
       it.appendChild(t); it.appendChild(s); it.appendChild(d);
-      var pin = document.createElement('button'); pin.className = 'ntpin' + (n.pinned ? ' on' : ''); pin.type = 'button';
-      pin.textContent = n.pinned ? '★' : '☆';
-      pin.title = n.pinned ? 'Unpin' : 'Pin to top'; pin.setAttribute('aria-label', pin.title + ' ' + (n.title || 'Untitled'));
-      pin.addEventListener('click', function(e){ e.stopPropagation(); toggleNotePin(n); });
-      it.appendChild(pin);
-      var x = document.createElement('button'); x.className = 'ntx'; x.type = 'button'; x.textContent = '✕';
-      x.title = 'Delete note'; x.setAttribute('aria-label', 'Delete note ' + (n.title || 'Untitled'));
-      x.addEventListener('click', function(e){ e.stopPropagation(); deleteNoteById(n.id, n.title); });
-      it.appendChild(x);
-      it.addEventListener('click', function(){ openNote(n.id); });
-      it.addEventListener('keydown', function(e){ if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); openNote(n.id); } });
+      if (!selecting){
+        var pin = document.createElement('button'); pin.className = 'ntpin' + (n.pinned ? ' on' : ''); pin.type = 'button';
+        pin.textContent = n.pinned ? '★' : '☆';
+        pin.title = n.pinned ? 'Unpin' : 'Pin to top'; pin.setAttribute('aria-label', pin.title + ' ' + (n.title || 'Untitled'));
+        pin.addEventListener('click', function(e){ e.stopPropagation(); toggleNotePin(n); });
+        it.appendChild(pin);
+        var x = document.createElement('button'); x.className = 'ntx'; x.type = 'button'; x.textContent = '✕';
+        x.title = 'Delete note'; x.setAttribute('aria-label', 'Delete note ' + (n.title || 'Untitled'));
+        x.addEventListener('click', function(e){ e.stopPropagation(); deleteNoteById(n.id, n.title); });
+        it.appendChild(x);
+      }
+      function act(){ if (selecting){ bulkToggle(n.id); it.classList.toggle('sel', bulkIsSel(n.id)); var c = it.querySelector('.bulk-sel'); if (c) c.checked = bulkIsSel(n.id); } else openNote(n.id); }
+      it.addEventListener('click', act);
+      it.addEventListener('keydown', function(e){ if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); act(); } });
       wrap.appendChild(it);
     });
   }
@@ -2427,6 +2470,58 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     deleteNoteById(ntCurrent.id, ntCurrent.title);
   }
 
+  // ── Bulk multi-select delete (KRA-85), shared across notes / decks / cards ──
+  var bulk = { kind: null, sel: {} };
+  function bulkActive(kind){ return bulk.kind === kind; }
+  function bulkIsSel(id){ return !!bulk.sel[id]; }
+  function bulkRerender(kind){
+    document.body.classList.toggle('selecting', !!bulk.kind);
+    if (kind === 'notes') renderNoteList();
+    else if (kind === 'decks') renderDecks();
+    else if (kind === 'cards') renderCards();
+  }
+  function bulkStart(kind){ if (bulk.kind && bulk.kind !== kind) bulkCancel(); bulk.kind = kind; bulk.sel = {}; bulkRerender(kind); bulkBar(); }
+  function bulkCancel(){ var k = bulk.kind; bulk.kind = null; bulk.sel = {}; if (k) bulkRerender(k); bulkBar(); }
+  function bulkToggle(id){ if (bulk.sel[id]) delete bulk.sel[id]; else bulk.sel[id] = 1; bulkBar(); }
+  function bulkCount(){ return Object.keys(bulk.sel).length; }
+  function bulkBar(){
+    var bar = $('bulkBar'); if (!bar) return;
+    if (!bulk.kind){ bar.classList.add('hidden'); return; }
+    bar.classList.remove('hidden');
+    var n = bulkCount();
+    $('bulkCount').textContent = n + ' selected';
+    $('bulkDelete').disabled = n === 0;
+    // Reflect the pressed state on whichever Select button is live.
+    ['selNotes', 'selDecks', 'selCards'].forEach(function(bid){ var b = $(bid); if (b) b.classList.toggle('on', ('sel' + (bulk.kind.charAt(0).toUpperCase() + bulk.kind.slice(1))) === bid); });
+  }
+  function bulkDeleteSelected(){
+    var ids = Object.keys(bulk.sel); if (!ids.length) return;
+    var kind = bulk.kind;
+    var label = kind === 'notes' ? 'note' : kind === 'decks' ? 'deck' : 'card';
+    var word = ids.length + ' ' + label + (ids.length === 1 ? '' : 's');
+    showConfirm('Delete ' + word + '?', 'This permanently deletes ' + word + (kind === 'decks' ? ' and their cards' : '') + '. This can’t be undone.', 'Delete', async function(){
+      var path = kind === 'notes' ? '/api/notes/bulk-delete'
+        : kind === 'decks' ? '/api/decks/bulk-delete'
+        : '/api/decks/' + encodeURIComponent(currentDeck.id) + '/cards/bulk-delete';
+      var out = await api(path, { method: 'POST', body: JSON.stringify({ ids: ids }) });
+      if (out.res.status === 401){ signOut(); return; }
+      if (!out.res.ok || !out.data.ok){ toast('err', 'Could not delete the selected items.'); return; }
+      bulk.kind = null; bulk.sel = {}; document.body.classList.remove('selecting'); bulkBar();
+      toast('ok', 'Deleted ' + word + '.');
+      if (kind === 'notes'){ if (ntCurrent && ids.indexOf(ntCurrent.id) >= 0){ ntCurrent = null; showNoteEditor(false); } loadNotes(); }
+      else if (kind === 'decks'){ loadDecks(); }
+      else { loadCards(); }
+    });
+  }
+  // A checkbox for a row in selection mode; wires toggle + row highlight.
+  function bulkCheckbox(id, rowEl){
+    var cb = document.createElement('input'); cb.type = 'checkbox'; cb.className = 'bulk-sel';
+    cb.checked = bulkIsSel(id); rowEl.classList.toggle('sel', cb.checked);
+    cb.setAttribute('aria-label', 'Select item');
+    cb.addEventListener('click', function(e){ e.stopPropagation(); bulkToggle(id); rowEl.classList.toggle('sel', bulkIsSel(id)); });
+    return cb;
+  }
+
   function addNotebook(){
     showPrompt('New notebook', { placeholder: 'Notebook name', okLabel: 'Create' }, async function(name){
       if (!name) return;
@@ -2467,6 +2562,11 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   });
   var ntSearchT;
   $('ntSearch').addEventListener('input', function(){ clearTimeout(ntSearchT); ntSearchT = setTimeout(loadNoteList, 200); });
+  // Bulk multi-select wiring (KRA-85). Each Select toggles its list's mode.
+  function wireSelect(btnId, kind){ var b = $(btnId); if (b) b.addEventListener('click', function(){ if (bulkActive(kind)) bulkCancel(); else bulkStart(kind); }); }
+  wireSelect('selNotes', 'notes'); wireSelect('selDecks', 'decks'); wireSelect('selCards', 'cards');
+  $('bulkCancel').addEventListener('click', bulkCancel);
+  $('bulkDelete').addEventListener('click', bulkDeleteSelected);
   $('ntTitle').addEventListener('input', scheduleNoteSave);
   $('ntBody').addEventListener('input', scheduleNoteSave);
   // Normalize paste so what appears in the editor is exactly what gets saved

@@ -10,6 +10,9 @@ import { YoutubeTranscript } from 'youtube-transcript';
 import dns from 'node:dns/promises';
 import crypto from 'node:crypto';
 import { applyRcEvent } from './lib/rc-webhook.js';
+import { ipIsPrivate } from './lib/net-guard.js';
+import { normalizeFeedback, buildLinearIssue } from './lib/feedback.js';
+import { csvCell, stripHtml, capText } from './lib/text.js';
 import net from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -523,61 +526,12 @@ async function fetchYouTube(rawUrl) {
   throw new Error("Couldn't get a transcript for that video — captions may be disabled or unavailable. You can paste the transcript text instead.");
 }
 
-function stripHtml(s) {
-  return s
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>').replace(/&#39;/g, "'").replace(/&quot;/g, '"')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-// ── SSRF guard for user-supplied URL ingestion ──────────────────────────────
-// An authenticated user hands us a URL and we fetch it, so without this a request
-// could target the cloud metadata endpoint (169.254.169.254), localhost, or any
-// internal host and read the response back inside generated cards. We block
-// private/loopback/link-local/ULA/metadata targets and — because fetch follows
-// redirects — re-validate on EVERY hop, so a public URL can't 302 to an internal
-// one. (Residual: DNS rebinding between our lookup and fetch's own resolve is not
-// closed here; a pinned-IP dispatcher is the follow-up if this needs hardening.)
-// An IPv4 tunnelled inside IPv6 (::ffff:1.2.3.4, or its hex form ::ffff:a9fe:a9fe
-// that WHATWG URL normalizes to, and IPv4-compatible ::a9fe:a9fe) must be judged by
-// its embedded IPv4, or the metadata/loopback IPs sail through the v6 checks. Returns
-// the dotted IPv4 when one is embedded, else the input unchanged.
-function embeddedV4(s) {
-  const dotted = s.match(/^::(?:ffff:)?(\d+\.\d+\.\d+\.\d+)$/);
-  if (dotted) return dotted[1];
-  const hex = s.match(/^::(?:ffff:)?([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
-  if (hex) {
-    const hi = parseInt(hex[1], 16), lo = parseInt(hex[2], 16);
-    return `${(hi >> 8) & 0xff}.${hi & 0xff}.${(lo >> 8) & 0xff}.${lo & 0xff}`;
-  }
-  return s;
-}
-
-function ipIsPrivate(ip) {
-  ip = embeddedV4(ip.toLowerCase()); // unwrap IPv4-mapped/compatible IPv6 to its v4
-  if (net.isIPv4(ip)) {
-    const [a, b] = ip.split('.').map(Number);
-    if (a === 10 || a === 127 || a === 0) return true;        // private / loopback / this-network
-    if (a === 169 && b === 254) return true;                  // link-local incl. metadata 169.254.169.254
-    if (a === 172 && b >= 16 && b <= 31) return true;         // private
-    if (a === 192 && b === 168) return true;                  // private
-    if (a === 100 && b >= 64 && b <= 127) return true;        // CGNAT
-    return false;
-  }
-  if (net.isIPv6(ip)) {
-    const low = ip.toLowerCase();
-    if (low === '::1' || low === '::') return true;           // loopback / unspecified
-    if (low.startsWith('fe80')) return true;                  // link-local
-    if (low.startsWith('fc') || low.startsWith('fd')) return true; // unique-local fc00::/7
-    return false;
-  }
-  return true; // unparseable → treat as unsafe
-}
-
+// SSRF guard for user-supplied URL ingestion: reject hostnames that resolve to a
+// private/loopback/link-local/ULA/metadata address. Because fetch follows
+// redirects, safeFetch re-validates on EVERY hop, so a public URL can't 302 to an
+// internal one. (Residual: DNS rebinding between our lookup and fetch's own
+// resolve is not closed here; a pinned-IP dispatcher is the follow-up.) The
+// address classification lives in ./lib/net-guard.js (unit-tested).
 async function assertPublicHost(hostname) {
   // WHATWG URL keeps IPv6 literals bracketed (e.g. "[::1]"); strip so net.isIP
   // recognizes them, otherwise they'd fall through to the DNS path.
@@ -669,10 +623,9 @@ async function buildIngest(body) {
 
   const CAP = 60000; // ~25 pages; extracted text beyond this is dropped (KRA-140)
   const asText = (raw, kind, filename) => {
-    const full = raw || '';
-    const clean = full.slice(0, CAP).trim();
+    const { clean, charCount, truncated } = capText(raw, CAP);
     if (!clean) throw new Error('There was nothing to generate from.');
-    return { userContent: [{ type: 'text', text: 'Study material:\n\n' + clean }], sourceKind: kind, filename, charCount: clean.length, truncated: full.length > CAP };
+    return { userContent: [{ type: 'text', text: 'Study material:\n\n' + clean }], sourceKind: kind, filename, charCount, truncated };
   };
 
   if (file && file.dataBase64) {
@@ -1506,12 +1459,7 @@ app.get('/api/admin/waitlist', requireSuperuser, async (_req, res) => {
 });
 
 // Escape a single CSV cell per RFC 4180.
-function csvCell(value) {
-  const s = value == null ? '' : String(value);
-  return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
-}
-
-// Protected CSV download. SELECT only.
+// Protected CSV download. SELECT only. csvCell() lives in ./lib/text.js.
 app.get('/api/admin/waitlist.csv', requireSuperuser, async (_req, res) => {
   const { data, error } = await supabase
     .from('waitlist')
@@ -1598,21 +1546,17 @@ app.get('/api/admin/analytics', requireSuperuser, async (req, res) => {
 
 // User submits feedback. RLS enforces user_id = auth.uid() on insert.
 app.post('/api/feedback', requireUser, async (req, res) => {
-  const kind = req.body?.kind === 'bug' ? 'bug' : 'idea';
-  const message = String(req.body?.message || '').trim().slice(0, 4000);
-  const page = String(req.body?.page || '').trim().slice(0, 200) || null;
-  if (message.length < 2) {
-    return res.status(400).json({ ok: false, error: 'Please add a little more detail.' });
-  }
+  const f = normalizeFeedback(req.body);
+  if (!f.ok) return res.status(400).json({ ok: false, error: f.error });
   if (rateLimited('feedback:' + req.user.id, 6)) {
     return res.status(429).json({ ok: false, error: 'Thanks! You’ve sent a few already — try again in a minute.' });
   }
   const { error } = await req.db.from('feedback').insert({
     user_id: req.user.id,
     email: req.user.email || null,
-    kind,
-    message,
-    page,
+    kind: f.kind,
+    message: f.message,
+    page: f.page,
   });
   if (error) {
     console.error('[feedback] insert failed:', error.message);
@@ -1663,15 +1607,7 @@ app.post('/api/admin/feedback/:id/linear', requireSuperuser, async (req, res) =>
   if (item.linear_url) {
     return res.json({ ok: true, url: item.linear_url, already: true });
   }
-  const title = (item.kind === 'bug' ? '[Bug] ' : '[Idea] ') + item.message.slice(0, 80).replace(/\s+/g, ' ');
-  const description = [
-    item.message,
-    '',
-    '---',
-    '_From in-app feedback_',
-    item.email ? '- Reporter: ' + item.email : null,
-    item.page ? '- Page: ' + item.page : null,
-  ].filter(Boolean).join('\n');
+  const { title, description } = buildLinearIssue(item);
   const query = `mutation Create($input: IssueCreateInput!) {
     issueCreate(input: $input) { success issue { identifier url } }
   }`;

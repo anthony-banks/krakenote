@@ -23,7 +23,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     --body:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
     --bg:#26364f; --surface:#2f4267; --surface-2:#3a5079;
     --text:#eef0f6; --muted:#a9b6ca; --border:rgba(233,231,241,.13);
-    --accent:#7fb2ff; --accent2:#8a7dff; --cta:#6c63ff; --cta-text:#ffffff;
+    --accent:#7fb2ff; --accent2:#8a7dff; --cta:#5b52e6; --cta-text:#ffffff;
     --cta-shadow:rgba(108,99,255,.38); --danger:#ff8674;
     --nav-bg:rgba(38,54,79,.72); --mark:url(/mark-dark.svg);
   }
@@ -98,9 +98,18 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   .btn-google:hover{border-color:var(--accent);transform:none;box-shadow:none}
   .auth .btn-primary{width:100%}
   .msg{display:none;font-family:var(--head);font-weight:600;font-size:14px;margin-bottom:14px;padding:11px 14px;border-radius:12px;line-height:1.45}
-  .msg.err{display:block;color:var(--danger);background:color-mix(in srgb,var(--danger) 12%,transparent);border:1px solid color-mix(in srgb,var(--danger) 30%,transparent)}
-  .msg.ok{display:block;color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);border:1px solid color-mix(in srgb,var(--accent) 30%,transparent)}
+  /* Message text colours are set for AA contrast on the tinted message
+     backgrounds in each theme (KRA-87), independent of the brand --danger/
+     --accent tokens which are tuned for buttons. */
+  .msg.err{display:block;color:#ffb9ad;background:color-mix(in srgb,var(--danger) 12%,transparent);border:1px solid color-mix(in srgb,var(--danger) 30%,transparent)}
+  .msg.ok{display:block;color:#b0d0ff;background:color-mix(in srgb,var(--accent) 12%,transparent);border:1px solid color-mix(in srgb,var(--accent) 30%,transparent)}
+  :root[data-theme="light"] .msg.err{color:#b3271a}
+  :root[data-theme="light"] .msg.ok{color:#3a41b0}
+  @media (prefers-color-scheme: light){:root:not([data-theme="dark"]) .msg.err{color:#b3271a}:root:not([data-theme="dark"]) .msg.ok{color:#3a41b0}}
   .msg a{color:inherit}
+  /* WCAG 2.2 AA (KRA-87): visible keyboard focus + reduced motion. */
+  :focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+  @media (prefers-reduced-motion: reduce){*{animation-duration:.001ms !important;animation-iteration-count:1 !important;transition-duration:.001ms !important;scroll-behavior:auto !important}}
   .switch{text-align:center;font-size:14px;color:var(--muted);margin-top:20px}
   .switch button{background:none;border:0;color:var(--accent);font-family:var(--head);font-weight:600;font-size:14px;cursor:pointer;padding:0}
   .switch button:hover{text-decoration:underline}

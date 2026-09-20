@@ -3,7 +3,7 @@
 
 :root{
   --abyss:#0A1A2F; --deep:#12314F; --teal:#22C3B6; --violet:#7B61FF;
-  --coral:#FF6B5C; --parchment:#F7F4ED; --slate:#5A6B7B;
+  --coral:#FF6B5C; --parchment:#F7F4ED; --slate:#8ea0b2;
   --head:'Poppins',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
   --body:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
 }
@@ -11,6 +11,12 @@
 body{font-family:var(--body);color:var(--parchment);background:var(--abyss);line-height:1.7;-webkit-font-smoothing:antialiased}
 a{color:var(--teal);text-decoration:none}
 a:hover{text-decoration:underline}
+/* WCAG 2.2 AA (KRA-87): links inside prose must be distinguishable without
+   relying on colour alone (1.4.1) — underline them. */
+p a, li a, .card a{text-decoration:underline}
+/* Visible keyboard focus (2.4.7 / 2.4.13). */
+a:focus-visible, button:focus-visible{outline:3px solid var(--teal);outline-offset:2px;border-radius:4px}
+@media (prefers-reduced-motion: reduce){*{animation-duration:.001ms !important;animation-iteration-count:1 !important;transition-duration:.001ms !important;scroll-behavior:auto !important}}
 .wrap{max-width:800px;margin:0 auto;padding:0 24px}
 
 nav{position:sticky;top:0;z-index:50;background:rgba(10,26,47,.72);backdrop-filter:blur(12px);border-bottom:1px solid rgba(255,255,255,.06)}
@@ -36,4 +42,4 @@ footer{background:#071426;border-top:1px solid rgba(255,255,255,.06);padding:34p
 footer .wrap{max-width:1140px;display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between}
 .foot-links{display:flex;gap:24px;font-size:14px;color:#8ea0b2}
 .foot-links a{color:#8ea0b2}.foot-links a:hover{color:var(--teal)}
-.copy{font-size:13px;color:#5f7288}
+.copy{font-size:13px;color:#8496a8}

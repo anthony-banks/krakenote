@@ -390,6 +390,9 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   .upg-plan-t{grid-area:t;font-family:var(--head);font-weight:700;font-size:15px}
   .upg-plan-p{grid-area:p;align-self:center;font-weight:700;font-size:15px}
   .upg-plan-s{grid-area:s;font-size:12px;color:var(--muted);margin-top:2px}
+  .upg-plan-badge{display:inline-block;margin-left:8px;font-family:var(--head);font-weight:700;font-size:10px;letter-spacing:.5px;color:#fff;background:var(--cta);padding:2px 7px;border-radius:999px;vertical-align:middle}
+  .upg-save{margin-top:12px;font-size:12.5px;line-height:1.5;color:var(--muted);background:color-mix(in srgb,var(--accent) 9%,transparent);border:1px solid color-mix(in srgb,var(--accent) 22%,transparent);border-radius:10px;padding:10px 12px}
+  .upg-save b{color:var(--text);font-weight:700}
 </style>
 </head>
 <body>
@@ -768,6 +771,9 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
         <textarea id="fbMsg" rows="3" maxlength="4000" placeholder="Tell us what's on your mind…"></textarea>
         <div class="msg" id="fbFormMsg"></div>
         <button class="btn btn-primary" id="fbSendBtn" type="button">Send feedback</button>
+        <div class="acct-sep"></div>
+        <h3 class="acct-h">Need a hand?</h3>
+        <p class="fb-lead" style="margin-bottom:0">Email <a href="mailto:support@krakenote.com?subject=Krakenote%20support">support@krakenote.com</a> and a human will get back to you.</p>
         <div class="acct-sep"></div>
         <div class="ios-soon">
           <span class="emoji">📱</span>
@@ -2920,13 +2926,18 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       toast('err', 'Could not open subscription management. Please try again, or email support@krakenote.com.');
     } finally { btn.disabled = false; btn.textContent = prev; }
   }
-  function planBtn(which, title, price, sub){
+  function planBtn(which, title, price, sub, badge){
     var b = document.createElement('button');
     b.type = 'button'; b.className = 'upg-plan' + (which === 'annual' ? ' best' : '');
     b.innerHTML = '<span class="upg-plan-t"></span><span class="upg-plan-p"></span><span class="upg-plan-s"></span>';
     b.querySelector('.upg-plan-t').textContent = title;
     b.querySelector('.upg-plan-p').textContent = price;
     b.querySelector('.upg-plan-s').textContent = sub;
+    if (badge){
+      var tEl = b.querySelector('.upg-plan-t');
+      var badgeEl = document.createElement('span'); badgeEl.className = 'upg-plan-badge'; badgeEl.textContent = badge;
+      tEl.appendChild(badgeEl);
+    }
     b.addEventListener('click', function(){ startPurchase(which); });
     return b;
   }
@@ -2982,8 +2993,14 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
       // Real checkout (RevenueCat + Stripe).
       $('upgradeBody').innerHTML = '<p style="margin:0 0 12px">' + pitch + '</p><div class="upg-plans"></div>';
       var wrap = $('upgradeBody').querySelector('.upg-plans');
-      if (rcPackages.annual) wrap.appendChild(planBtn('annual', 'Annual', '$59.99/yr', '7-day free trial · best value'));
+      if (rcPackages.annual) wrap.appendChild(planBtn('annual', 'Annual', '$59.99/yr', '7-day free trial · just $5/mo, billed yearly', '2 MONTHS FREE'));
       if (rcPackages.monthly) wrap.appendChild(planBtn('monthly', 'Monthly', '$5.99/mo', '7-day free trial'));
+      // Annual savings callout (KRA-25): concrete "why annual is better".
+      if (rcPackages.annual && rcPackages.monthly){
+        var save = document.createElement('div'); save.className = 'upg-save';
+        save.innerHTML = 'Annual works out to <b>$5.00/mo</b> — that\'s <b>$11.89 a year</b> cheaper than paying monthly (about two months free).';
+        $('upgradeBody').appendChild(save);
+      }
       $('upgradeReqBtn').classList.add('hidden');
       $('upgradeMsg').textContent = '';
     } else {

@@ -7,6 +7,43 @@
 <meta name="description" content="Krakenote is your note-taker and AI study aid in one: take notes in clean notebooks, then turn any note, textbook, slide, or PDF into instant AI flashcards, quizzes, and a tutor — with spaced-repetition review. Free to start on iOS & web." />
 <link rel="canonical" href="https://www.krakenote.com/" />
 <meta name="theme-color" content="#26364f" />
+<!-- Structured data (KRA-153): app + organization + site, for rich results. No
+     aggregateRating until we have real reviews — fabricated ratings are penalized. -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "SoftwareApplication",
+      "name": "Krakenote",
+      "applicationCategory": "EducationalApplication",
+      "operatingSystem": "Web, iOS",
+      "url": "https://www.krakenote.com/",
+      "description": "An AI-first study app: take notes in clean notebooks, then turn any note, textbook, slide, or PDF into instant flashcards, quizzes, and an AI tutor — with a spaced-repetition review loop.",
+      "image": "https://www.krakenote.com/og-image.png",
+      "offers": [
+        { "@type": "Offer", "name": "Free", "price": "0", "priceCurrency": "USD" },
+        { "@type": "Offer", "name": "Pro (monthly)", "price": "5.99", "priceCurrency": "USD" },
+        { "@type": "Offer", "name": "Pro (annual)", "price": "59.99", "priceCurrency": "USD" }
+      ],
+      "publisher": { "@id": "https://www.krakenote.com/#org" }
+    },
+    {
+      "@type": "Organization",
+      "@id": "https://www.krakenote.com/#org",
+      "name": "Krakenote",
+      "url": "https://www.krakenote.com/",
+      "logo": "https://www.krakenote.com/logo-light.svg"
+    },
+    {
+      "@type": "WebSite",
+      "name": "Krakenote",
+      "url": "https://www.krakenote.com/",
+      "publisher": { "@id": "https://www.krakenote.com/#org" }
+    }
+  ]
+}
+</script>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 <link rel="apple-touch-icon" href="/favicon.svg" />
 <!-- Open Graph -->

@@ -100,6 +100,10 @@ app.use(helmet({ contentSecurityPolicy: false }));
 // everything else stays tiny. The first matching parser wins — express.json
 // skips a body it has already parsed, so the 8kb global never re-runs here.
 app.use('/api/decks', express.json({ limit: '12mb' }));
+// Note bodies can be up to NOTE_BODY_MAX (100k chars) of rich-text HTML; the 8kb
+// global would 413 a large paste before the handler's slice ever runs. Give the
+// notes routes headroom for the full body plus JSON/HTML overhead.
+app.use('/api/notes', express.json({ limit: '1mb' }));
 app.use('/api/rc', express.json({ limit: '64kb' })); // RevenueCat webhook payloads
 app.use(express.json({ limit: '8kb' }));
 

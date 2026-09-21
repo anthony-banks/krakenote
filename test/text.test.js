@@ -19,6 +19,20 @@ test('csvCell: null/undefined → empty string', () => {
   assert.equal(csvCell(undefined), '');
 });
 
+test('csvCell: neutralizes spreadsheet formula injection (KRA-145)', () => {
+  assert.equal(csvCell('=1+1'), "'=1+1");
+  assert.equal(csvCell('+cmd'), "'+cmd");
+  assert.equal(csvCell('-2+3'), "'-2+3");
+  assert.equal(csvCell('@SUM(A1)'), "'@SUM(A1)");
+  assert.equal(csvCell('\tstart-tab'), "'\tstart-tab");
+  // A dangerous value that also needs quoting gets both: prefix then RFC-4180 quote.
+  assert.equal(csvCell('=HYPERLINK("http://x","a,b")'), '"\'=HYPERLINK(""http://x"",""a,b"")"');
+  // Ordinary values are untouched (no false-positive prefixing).
+  assert.equal(csvCell('user@example.com'), 'user@example.com'); // @ only triggers at start
+  assert.equal(csvCell('hello'), 'hello');
+  assert.equal(csvCell('3 - 2'), '3 - 2'); // leading digit, not an operator
+});
+
 test('stripHtml: removes tags and script/style bodies', () => {
   assert.equal(stripHtml('<p>Hello <b>world</b></p>'), 'Hello world');
   assert.equal(stripHtml('a<script>alert(1)</script>b'), 'a b');

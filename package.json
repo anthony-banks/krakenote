@@ -8,8 +8,7 @@
     "start": "node server/index.js",
     "dev": "node server/index.js",
     "test": "node --test test/*.test.js",
-    "test:e2e": "playwright test",
-    "deploy:staging": "railway up --detach --environment staging --service krakenote"
+    "test:e2e": "playwright test"
   },
   "engines": {
     "node": ">=20"

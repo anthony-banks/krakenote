@@ -1,9 +1,13 @@
 // Small pure text helpers shared by index.js, extracted so they're unit-testable.
 
 // Escape one CSV cell per RFC 4180: quote when the value contains a comma, quote,
-// CR or LF, doubling any embedded quotes.
+// CR or LF, doubling any embedded quotes. Also neutralize spreadsheet formula
+// injection (KRA-145): a value starting with = + - @ (or a tab/CR) is executed as
+// a formula by Excel/Sheets/Numbers, so prefix it with a single quote to force it
+// to render as literal text.
 export function csvCell(value) {
-  const s = value == null ? '' : String(value);
+  let s = value == null ? '' : String(value);
+  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
   return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
 

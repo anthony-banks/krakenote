@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Free Flashcard Maker — Turn Notes &amp; PDFs into Flashcards | Krakenote</title>
+<meta name="description" content="Free AI flashcard maker — paste your notes or upload a PDF and get study flashcards instantly. No signup required. Then save them and make unlimited sets, quizzes, and an AI tutor with Krakenote." />
+<link rel="canonical" href="https://www.krakenote.com/try" />
+<meta name="theme-color" content="#26364f" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<meta property="og:title" content="Free Flashcard Maker — Notes &amp; PDFs → Flashcards | Krakenote" />
+<meta property="og:description" content="Paste your notes or drop a PDF and get AI study flashcards instantly — free, no signup." />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://www.krakenote.com/try" />
+<meta property="og:image" content="https://www.krakenote.com/og-image.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:site_name" content="Krakenote" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Free Flashcard Maker — Notes &amp; PDFs → Flashcards" />
+<meta name="twitter:description" content="Paste notes or upload a PDF → instant AI flashcards. Free, no signup." />
+<meta name="twitter:image" content="https://www.krakenote.com/og-image.png" />
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "Krakenote Free Flashcard Maker",
+  "applicationCategory": "EducationalApplication",
+  "operatingSystem": "Web",
+  "url": "https://www.krakenote.com/try",
+  "description": "Turn notes and PDFs into AI study flashcards instantly — free, no signup.",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+}
+</script>
+<script>(function(){try{var r=document.documentElement,s=localStorage.getItem('theme'),
+sys=matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';
+r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap');
+  :root{
+    --bg:#26364f; --surface:#2f4267; --surface-2:#3a5079; --text:#eef0f6; --muted:#c0ccdd;
+    --border:rgba(233,231,241,.14); --accent:#b0d0ff; --cta:#5b52e6; --cta-text:#fff; --gold:#f5b301;
+    --head:'Poppins',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    --body:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  }
+  :root[data-theme="light"]{
+    --bg:#f4f5fb; --surface:#ffffff; --surface-2:#eef0f8; --text:#161826; --muted:#5b6678;
+    --border:rgba(20,22,45,.10); --accent:#4f5bd5; --cta:#5b52e6; --cta-text:#fff;
+  }
+  @media (prefers-color-scheme: light){ :root:not([data-theme="dark"]){
+    --bg:#f4f5fb; --surface:#ffffff; --surface-2:#eef0f8; --text:#161826; --muted:#5b6678;
+    --border:rgba(20,22,45,.10); --accent:#4f5bd5; --cta:#5b52e6; --cta-text:#fff; } }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:var(--body);line-height:1.6;-webkit-font-smoothing:antialiased}
+  a{color:inherit}
+  .wrap{max-width:760px;margin:0 auto;padding:0 20px}
+  nav{display:flex;align-items:center;justify-content:space-between;max-width:1080px;margin:0 auto;padding:18px 20px}
+  .brand{display:flex;align-items:center;gap:9px;font-family:var(--head);font-weight:800;font-size:20px;text-decoration:none;color:var(--text)}
+  .brand svg{width:26px;height:26px}
+  .nav-cta{display:flex;gap:18px;align-items:center;font-weight:600;font-size:15px}
+  .nav-cta a.ghost{color:var(--muted);text-decoration:none}
+  .nav-cta a.solid{background:var(--cta);color:var(--cta-text);padding:9px 16px;border-radius:12px;text-decoration:none}
+  header{text-align:center;padding:38px 0 22px}
+  .eyebrow{font-family:var(--head);font-weight:700;font-size:13px;letter-spacing:1.4px;text-transform:uppercase;color:var(--accent);margin-bottom:12px}
+  h1{font-family:var(--head);font-weight:800;font-size:clamp(28px,5.4vw,42px);line-height:1.1;letter-spacing:-1px;text-wrap:balance}
+  .sub{color:var(--muted);font-size:17px;margin:12px auto 0;max-width:540px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:22px;margin-top:26px}
+  .seg{display:inline-flex;background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:4px;margin-bottom:14px}
+  .seg button{font-family:var(--body);font-weight:600;font-size:14px;color:var(--muted);background:none;border:0;padding:8px 16px;border-radius:9px;cursor:pointer}
+  .seg button.on{background:var(--surface);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.14)}
+  textarea{width:100%;min-height:150px;resize:vertical;font-family:var(--body);font-size:15px;line-height:1.55;padding:14px;border-radius:12px;border:1.5px solid var(--border);background:var(--surface-2);color:var(--text);outline:none}
+  textarea:focus{border-color:var(--accent)}
+  .drop{border:1.5px dashed var(--border);border-radius:12px;background:var(--surface-2);padding:26px;text-align:center;color:var(--muted);cursor:pointer}
+  .drop b{color:var(--text);font-family:var(--head);font-weight:600}
+  .drop.has{color:var(--text)}
+  input[type=file]{display:none}
+  .go{display:block;width:100%;margin-top:16px;font-family:var(--head);font-weight:700;font-size:16px;color:var(--cta-text);background:var(--cta);border:0;border-radius:14px;padding:15px;cursor:pointer;box-shadow:0 10px 30px color-mix(in srgb,var(--cta) 36%,transparent)}
+  .go:disabled{opacity:.6}
+  .msg{margin-top:12px;font-size:14px;color:var(--accent);min-height:18px;text-align:center}
+  .msg.err{color:#ff8674}
+  .hint{text-align:center;color:var(--muted);font-size:12.5px;margin-top:10px}
+  .results{margin-top:28px}
+  .summary{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px 18px;color:var(--muted);font-size:14px;line-height:1.6;margin-bottom:16px}
+  .summary b{color:var(--accent);font-family:var(--head);font-weight:600;font-size:11px;letter-spacing:1px;display:block;margin-bottom:6px}
+  .fc{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px;margin-bottom:12px;cursor:pointer;transition:border-color .12s}
+  .fc:hover{border-color:var(--accent)}
+  .fc .tag{font-family:var(--head);font-weight:700;font-size:10px;letter-spacing:1px;color:var(--accent)}
+  .fc .q{font-family:var(--head);font-weight:600;font-size:16px;margin-top:8px}
+  .fc .a{color:var(--muted);font-size:15px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
+  .fc .a.hidden{display:none}
+  .fc .flip{font-size:12.5px;color:var(--accent);margin-top:8px}
+  .conv{margin-top:26px;text-align:center;background:linear-gradient(160deg,color-mix(in srgb,var(--cta) 16%,var(--surface)),var(--surface));border:1px solid color-mix(in srgb,var(--cta) 30%,var(--border));border-radius:20px;padding:28px 22px}
+  .conv h2{font-family:var(--head);font-weight:800;font-size:22px;letter-spacing:-.4px}
+  .conv p{color:var(--muted);font-size:15px;margin:8px auto 18px;max-width:440px}
+  .conv a{display:inline-block;font-family:var(--head);font-weight:700;font-size:16px;color:var(--cta-text);background:var(--cta);padding:14px 26px;border-radius:14px;text-decoration:none;box-shadow:0 10px 30px color-mix(in srgb,var(--cta) 36%,transparent)}
+  .perks{display:flex;flex-wrap:wrap;gap:10px 22px;justify-content:center;margin-top:16px;color:var(--muted);font-size:13.5px}
+  .perks span{display:inline-flex;align-items:center;gap:6px}
+  footer{text-align:center;color:var(--muted);font-size:13px;padding:48px 20px 40px}
+  footer a{color:var(--muted);text-decoration:none;margin:0 8px}
+  .spin{display:inline-block;width:16px;height:16px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:sp .7s linear infinite;vertical-align:-3px;margin-right:8px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  @media (prefers-reduced-motion: reduce){.spin{animation:none}}
+</style>
+</head>
+<body>
+  <nav>
+    <a class="brand" href="/">
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 12A7.9 7.9 0 0 1 12 5.4 5.7 5.7 0 0 1 7.1 12 4.1 4.1 0 0 1 12 15.6 2.9 2.9 0 0 1 14.6 12 2 2 0 0 1 12 10.2 1.4 1.4 0 0 1 11.1 12" stroke="var(--cta)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Krakenote
+    </a>
+    <div class="nav-cta">
+      <a class="ghost" href="/login">Sign in</a>
+      <a class="solid" href="/signup">Get started</a>
+    </div>
+  </nav>
+
+  <div class="wrap">
+    <header>
+      <div class="eyebrow">Free · No signup</div>
+      <h1>Turn your notes into flashcards</h1>
+      <p class="sub">Paste your notes or drop a PDF and get AI study flashcards in seconds. No account needed — try it right now.</p>
+    </header>
+
+    <div class="card" id="inputCard">
+      <div class="seg">
+        <button type="button" class="on" data-mode="text">Paste text</button>
+        <button type="button" data-mode="file">Upload PDF / image</button>
+      </div>
+      <div id="paneText">
+        <textarea id="text" placeholder="Paste your notes, a textbook paragraph, lecture summary…"></textarea>
+      </div>
+      <div id="paneFile" style="display:none">
+        <label class="drop" id="drop" for="file"><b>Choose a PDF or image</b><br><span id="dropName">or tap to browse — up to ~8&nbsp;MB</span></label>
+        <input type="file" id="file" accept="application/pdf,image/*" />
+      </div>
+      <button class="go" id="go">✨ Generate flashcards</button>
+      <div class="msg" id="msg"></div>
+      <div class="hint">Free preview makes up to 6 cards. Sign up to save them and make unlimited sets.</div>
+    </div>
+
+    <div class="results" id="results" style="display:none">
+      <div class="summary" id="summary" style="display:none"></div>
+      <div id="cards"></div>
+      <div class="conv">
+        <h2>Love these? Keep them forever.</h2>
+        <p>Sign up free to save your flashcards, make unlimited sets, auto-generate quizzes, and ask an AI tutor.</p>
+        <a href="/signup">Create your free account →</a>
+        <div class="perks">
+          <span>🗂️ Save &amp; organize</span><span>🧠 Spaced-repetition review</span>
+          <span>❓ Instant quizzes</span><span>📱 Syncs to iOS &amp; web</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <div><a href="/">Home</a> · <a href="/signup">Sign up</a> · <a href="/support.html">Support</a> · <a href="/privacy.html">Privacy</a></div>
+    <div style="margin-top:10px">© 2026 Krakenote</div>
+  </footer>
+
+<script>
+  var $ = function(id){ return document.getElementById(id); };
+  var mode = 'text', picked = null;
+
+  Array.prototype.forEach.call(document.querySelectorAll('.seg button'), function(b){
+    b.addEventListener('click', function(){
+      mode = b.getAttribute('data-mode');
+      Array.prototype.forEach.call(document.querySelectorAll('.seg button'), function(x){ x.classList.toggle('on', x === b); });
+      $('paneText').style.display = mode === 'text' ? 'block' : 'none';
+      $('paneFile').style.display = mode === 'file' ? 'block' : 'none';
+      setMsg('', '');
+    });
+  });
+
+  $('file').addEventListener('change', function(e){
+    var f = e.target.files && e.target.files[0];
+    if (!f){ picked = null; return; }
+    if (f.size > 8 * 1024 * 1024){ setMsg('err', 'That file is over 8 MB — try a smaller one, or paste the text.'); picked = null; return; }
+    var reader = new FileReader();
+    reader.onload = function(){
+      var b64 = String(reader.result || '').split(',')[1] || '';
+      picked = { name: f.name, mediaType: f.type || 'application/octet-stream', dataBase64: b64 };
+      $('drop').classList.add('has'); $('dropName').textContent = f.name;
+    };
+    reader.readAsDataURL(f);
+  });
+
+  function setMsg(kind, text){ var m = $('msg'); m.className = 'msg' + (kind ? ' ' + kind : ''); m.textContent = text; }
+  function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+
+  function renderCards(data){
+    $('results').style.display = 'block';
+    var sum = $('summary');
+    if (data.summary){ sum.style.display = 'block'; sum.innerHTML = '<b>SUMMARY</b>' + esc(data.summary); } else sum.style.display = 'none';
+    var wrap = $('cards'); wrap.innerHTML = '';
+    (data.cards || []).forEach(function(c){
+      var el = document.createElement('div'); el.className = 'fc';
+      el.innerHTML = '<div class="tag">' + (c.type === 'cloze' ? 'CLOZE' : 'BASIC') + '</div>' +
+        '<div class="q">' + esc(c.front) + '</div>' +
+        '<div class="flip">Tap to reveal answer</div>' +
+        '<div class="a hidden">' + esc(c.back) + '</div>';
+      el.addEventListener('click', function(){
+        var a = el.querySelector('.a'), fl = el.querySelector('.flip');
+        a.classList.toggle('hidden');
+        fl.textContent = a.classList.contains('hidden') ? 'Tap to reveal answer' : 'Tap to hide answer';
+      });
+      wrap.appendChild(el);
+    });
+    $('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  $('go').addEventListener('click', async function(){
+    var body = {};
+    if (mode === 'text'){
+      var t = ($('text').value || '').trim();
+      if (t.length < 20){ setMsg('err', 'Paste a little more text (at least ~20 characters).'); return; }
+      body.text = t;
+    } else {
+      if (!picked){ setMsg('err', 'Choose a PDF or image first.'); return; }
+      body.file = picked;
+    }
+    var btn = $('go'); btn.disabled = true; var original = btn.textContent;
+    btn.innerHTML = '<span class="spin"></span>Generating…'; setMsg('', '');
+    try {
+      var res = await fetch('/api/try', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      var data = await res.json().catch(function(){ return {}; });
+      if (!res.ok || !data.ok){
+        setMsg('err', (data && data.error) || 'Something went wrong — please try again.');
+        return;
+      }
+      renderCards(data);
+    } catch (e){
+      setMsg('err', 'Could not reach the server — check your connection and try again.');
+    } finally {
+      btn.disabled = false; btn.textContent = original;
+    }
+  });
+</script>
+</body>
+</html>

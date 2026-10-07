@@ -6,6 +6,7 @@ import { AxeBuilder } from '@axe-core/playwright';
 // silently regress contrast, labels, roles, or link distinguishability.
 const PAGES = [
   { name: 'landing', url: '/' },
+  { name: 'try', url: '/try' },
   { name: 'support', url: '/support.html' },
   { name: 'privacy', url: '/privacy.html' },
   { name: 'terms', url: '/terms.html' },

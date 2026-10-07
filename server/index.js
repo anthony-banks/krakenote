@@ -104,6 +104,9 @@ app.use('/api/decks', express.json({ limit: '12mb' }));
 // global would 413 a large paste before the handler's slice ever runs. Give the
 // notes routes headroom for the full body plus JSON/HTML overhead.
 app.use('/api/notes', express.json({ limit: '1mb' }));
+// Free no-signup tool (KRA-161): accepts a small paste or file. Smaller than the
+// deck limit to cap cost/abuse on an unauthenticated route.
+app.use('/api/try', express.json({ limit: '6mb' }));
 app.use('/api/rc', express.json({ limit: '64kb' })); // RevenueCat webhook payloads
 app.use(express.json({ limit: '8kb' }));
 
@@ -1662,6 +1665,71 @@ app.post('/api/admin/feedback/:id/linear', requireSuperuser, async (req, res) =>
     return res.status(502).json({ ok: false, error: 'Could not reach Linear.' });
   }
 });
+
+// ── Free no-signup flashcard tool (KRA-161) ─────────────────────────────────
+// Top-of-funnel: anyone can turn a paste / PDF / image into a few flashcards with
+// no account, then is nudged to sign up to save + do more. Heavily throttled per
+// IP and run on the cheap model with a tiny output cap to bound cost on an
+// unauthenticated route.
+const tryBuckets = new Map();
+const TRY_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+const TRY_MAX_PER_HOUR = 6;
+function tryRateLimited(ip) {
+  const now = Date.now();
+  const rec = tryBuckets.get(ip) || { count: 0, start: now };
+  if (now - rec.start > TRY_WINDOW_MS) { rec.count = 0; rec.start = now; }
+  rec.count += 1;
+  tryBuckets.set(ip, rec);
+  if (tryBuckets.size > 5000) { for (const [k, v] of tryBuckets) if (now - v.start > TRY_WINDOW_MS) tryBuckets.delete(k); }
+  return rec.count > TRY_MAX_PER_HOUR;
+}
+
+app.post('/api/try', async (req, res) => {
+  if (!anthropic) return res.status(503).json({ ok: false, error: 'The demo is unavailable right now — please try again later.' });
+  if (tryRateLimited(clientIp(req))) {
+    return res.status(429).json({ ok: false, code: 'try_limit', error: "That's the free preview limit for now — sign up free to keep making flashcards." });
+  }
+  // Only text + file are accepted here (no URL fetch on an anon route). Text is
+  // pre-capped so a huge paste can't run up the model bill.
+  const b = req.body || {};
+  const input = {
+    text: typeof b.text === 'string' ? b.text.slice(0, 10000) : '',
+    file: b.file && typeof b.file === 'object' ? b.file : undefined,
+  };
+  let userContent, sourceKind;
+  try {
+    ({ userContent, sourceKind } = await buildIngest(input));
+  } catch (ex) {
+    return res.status(400).json({ ok: false, error: ex.message || 'Could not read that — paste some notes or choose a file.' });
+  }
+  try {
+    const msg = await anthropic.messages.create({
+      model: AI_MODEL_FREE,
+      max_tokens: 2500,
+      system: GEN_SYSTEM + ' Produce AT MOST 6 cards.',
+      output_config: { format: { type: 'json_schema', schema: CARD_SCHEMA } },
+      messages: [{ role: 'user', content: userContent }],
+    });
+    if (msg.stop_reason === 'refusal') return res.status(422).json({ ok: false, error: 'Could not generate from that material.' });
+    const block = (msg.content || []).find((x) => x.type === 'text');
+    const result = JSON.parse(block?.text || '{}');
+    const cards = (Array.isArray(result.cards) ? result.cards : [])
+      .slice(0, 6)
+      .map((c) => ({ type: c?.type === 'cloze' ? 'cloze' : 'basic', front: String(c?.front || '').slice(0, 1000), back: String(c?.back || '').slice(0, 2000) }))
+      .filter((c) => c.front && c.back);
+    if (!cards.length) return res.status(422).json({ ok: false, error: 'Could not make cards from that — try adding a bit more detail.' });
+    return res.json({ ok: true, cards, summary: typeof result.summary === 'string' ? result.summary.slice(0, 400) : '' });
+  } catch (ex) {
+    console.error('[try] failed:', ex?.message);
+    const m = (ex?.message || '').toLowerCase();
+    if (sourceKind === 'pdf' && (ex?.status === 400 || ex?.status === 413 || /page|too large|exceed|maximum/.test(m))) {
+      return res.status(422).json({ ok: false, error: 'That PDF is too long or large for the free preview. Try a shorter one, or paste the text.' });
+    }
+    return res.status(502).json({ ok: false, error: 'Generation failed — please try again.' });
+  }
+});
+// Clean URL for the free tool.
+app.get('/try', (_req, res) => res.sendFile(join(SITE_DIR, 'try.html')));
 
 // Brand icons, served straight from brand/ so there is no duplicated copy to
 // drift. Rendered as CSS masks in the UI, since the source SVGs are a fixed navy.

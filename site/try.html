@@ -209,6 +209,20 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     $('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
+  // Google Ads tag (KRA-107): /try is a primary ad-landing page, so load the
+  // AW-… tag here too — otherwise an ad click's gclid isn't captured and the
+  // later signup conversion can't be attributed. Config-gated: no id → skip.
+  try { fetch('/api/config', { cache:'no-store' }).then(function(r){ return r.json(); }).then(function(cfg){
+    var id = cfg && cfg.googleAdsId; if (!id || window.gtag) return;
+    var sc = document.createElement('script'); sc.async = true;
+    sc.src = 'https://www.googletagmanager.com/gtag/js?id=' + encodeURIComponent(id);
+    document.head.appendChild(sc);
+    window.dataLayer = window.dataLayer || [];
+    window.gtag = function(){ window.dataLayer.push(arguments); };
+    window.gtag('js', new Date());
+    window.gtag('config', id);
+  }).catch(function(){}); } catch(e){}
+
   $('go').addEventListener('click', async function(){
     var body = {};
     if (mode === 'text'){

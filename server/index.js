@@ -1731,6 +1731,20 @@ app.post('/api/try', async (req, res) => {
 // Clean URL for the free tool.
 app.get('/try', (_req, res) => res.sendFile(join(SITE_DIR, 'try.html')));
 
+// Midnight Vault (Apple TV apps that list krakenote.com as their developer site).
+// Explicit routes: express.static would 301 the bare /midnight-vault directory to
+// a trailing slash, and the pages should answer 200 at their clean URLs.
+app.get('/midnight-vault', (_req, res) => res.sendFile(join(SITE_DIR, 'midnight-vault', 'index.html')));
+app.get('/midnight-vault/privacy', (_req, res) => res.sendFile(join(SITE_DIR, 'midnight-vault', 'privacy.html')));
+app.get('/midnight-vault/support', (_req, res) => res.sendFile(join(SITE_DIR, 'midnight-vault', 'support.html')));
+
+// app-ads.txt for the ad networks' crawlers: must be plain text, never the HTML
+// catch-all. Edit site/app-ads.txt to add publisher lines.
+app.get('/app-ads.txt', (_req, res) => {
+  res.type('text/plain; charset=utf-8').set('Cache-Control', 'public, max-age=300');
+  res.sendFile(join(SITE_DIR, 'app-ads.txt'));
+});
+
 // Brand icons, served straight from brand/ so there is no duplicated copy to
 // drift. Rendered as CSS masks in the UI, since the source SVGs are a fixed navy.
 app.use('/icons', express.static(join(__dirname, '..', 'brand', 'icons'), { maxAge: '7d' }));

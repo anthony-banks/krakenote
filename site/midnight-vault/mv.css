@@ -1,0 +1,24 @@
+/* Midnight Vault — layered on /legal.css (same layout + type scale), re-toned
+   dark and blood-red so the section reads as its own brand, not Krakenote. */
+:root{
+  --abyss:#0b0a0d; --deep:#16131a; --teal:#e0414b; --slate:#9a929f;
+  --parchment:#f2ece6;
+}
+body{background:radial-gradient(ellipse at top,#1d0f14 0%,var(--abyss) 60%) fixed;background-color:var(--abyss)}
+p,ul{color:#cfc6c9}
+nav{background:rgba(11,10,13,.78);border-bottom-color:rgba(224,65,75,.12)}
+.navlinks a{color:#cfc6c9}
+.brand .mv-mark{width:30px;height:30px}
+.card{border-color:rgba(224,65,75,.18)}
+footer{background:#070609;border-top-color:rgba(224,65,75,.12)}
+.foot-links,.foot-links a{color:var(--slate)}
+.copy{color:#8a828e}
+
+/* Landing */
+.mv-hero{padding:24px 0 8px}
+.mv-hero h1{font-size:clamp(36px,6vw,56px);letter-spacing:-1.5px}
+.mv-hero .lede{font-size:18px;max-width:620px}
+.mv-apps{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px;margin:32px 0}
+.mv-apps .card{margin:0}
+.mv-apps h2{margin-top:0}
+.mv-apps .tag{font-family:var(--head);font-weight:600;font-size:12px;letter-spacing:1px;text-transform:uppercase;color:var(--teal);margin-bottom:6px}

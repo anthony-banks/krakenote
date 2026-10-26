@@ -1,0 +1,5 @@
+# app-ads.txt for krakenote.com
+#
+# Google publisher line will be added after Ad Manager / AdSense approval, e.g.:
+#
+# google.com, pub-XXXXXXXXXXXXXXXX, DIRECT, f08c47fec0942fa0

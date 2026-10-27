@@ -32,7 +32,7 @@ Krakenote is an AI-first study app — **iOS (SwiftUI)** + **companion web app**
   - **staging** env → `krakenote-staging.up.railway.app`
 - **Database:** Supabase — **separate projects** for prod and staging (test data never touches prod). Schema lives in `supabase/migrations/` (Supabase CLI). Change flow: add a migration with `supabase migration new <name>`, then `supabase db push` (after a one-time `supabase login` + `supabase link --project-ref <ref>`). Never hand-paste SQL in the dashboard.
 - **Secrets:** `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` live only as Railway env vars, never committed. The service/secret key bypasses RLS and must never reach the browser.
-- **Domain:** `krakenote.com` at GoDaddy → CNAME `www` → Railway; apex 301-forwards to `www`.
+- **Domain:** `krakenote.com` registered at GoDaddy, DNS on **Cloudflare** (all records DNS-only / grey cloud — Railway issues the certs). `www` and the apex (`@`, CNAME-flattened) both CNAME to Railway; the server 301s apex → `www`, keeping the path. Email is ImprovMX forwarding — keep its MX + SPF records (and `_dmarc`) on any DNS change, plus the `_railway-verify` TXT records for both hostnames.
 
 ## Dev commands
 

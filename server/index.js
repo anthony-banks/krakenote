@@ -1161,6 +1161,30 @@ app.patch('/api/profile', requireUser, async (req, res) => {
   return res.json({ ok: true });
 });
 
+// Delete the caller's own account (App Store guideline 5.1.1(v)). Deleting the
+// auth user cascades to every user-owned table (profiles, decks, cards, reviews,
+// sources, notebooks, notes, ai_usage); events and feedback are kept with
+// user_id set null, so we strip the feedback email first. The body must echo
+// { confirm: 'DELETE' } so a stray request can't wipe an account. An App Store
+// subscription is billed by Apple and has to be cancelled there separately.
+app.delete('/api/account', requireUser, async (req, res) => {
+  if (req.body?.confirm !== 'DELETE') {
+    return res.status(400).json({ ok: false, error: 'Confirmation required.' });
+  }
+  if (rateLimited('account-delete:' + req.user.id, 3)) {
+    return res.status(429).json({ ok: false, error: 'Too many attempts — try again in a minute.' });
+  }
+  const uid = req.user.id;
+  const { error: fbErr } = await supabase.from('feedback').update({ email: null }).eq('user_id', uid);
+  if (fbErr) console.error('[account] feedback scrub failed:', fbErr.message); // non-fatal
+  const { error } = await supabase.auth.admin.deleteUser(uid);
+  if (error) {
+    console.error('[account] delete failed:', error.message);
+    return res.status(500).json({ ok: false, error: 'Could not delete your account. Please try again or email support@krakenote.com.' });
+  }
+  return res.json({ ok: true });
+});
+
 // Manual card reorder: persist 1-based positions for the given ordered ids.
 app.post('/api/decks/:id/cards/reorder', requireUser, async (req, res) => {
   const ids = Array.isArray(req.body?.orderedIds) ? req.body.orderedIds.slice(0, 1000) : [];

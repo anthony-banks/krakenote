@@ -90,6 +90,7 @@ FSRS state lives on the card (`stability`, `difficulty`, `fsrs_state`, `lapses`,
 | GET | `/api/stats` | — | `{ decks, cards, due, streak, reviewedToday, reviewed7d, totalReviews, retentionPct }` |
 | GET | `/api/profile` | — | `{ email, firstName, lastName }` |
 | PATCH | `/api/profile` | `{ firstName, lastName }` | `{ ok }` |
+| DELETE | `/api/account` | `{ confirm: 'DELETE' }` | `{ ok }` — permanently deletes the caller's auth user; all owned rows cascade |
 
 ---
 

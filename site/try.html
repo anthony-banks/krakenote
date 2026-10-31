@@ -118,7 +118,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     <header>
       <div class="eyebrow">Free · No signup</div>
       <h1>Turn your notes into flashcards</h1>
-      <p class="sub">Paste your notes or drop a PDF and get AI study flashcards in seconds. No account needed — try it right now.</p>
+      <p class="sub">Paste your notes, a PDF, or even a <a href="/chatgpt-to-flashcards" style="color:var(--accent)">ChatGPT / Claude chat</a> and get AI study flashcards in seconds. No account needed — try it right now.</p>
     </header>
 
     <div class="card" id="inputCard">
@@ -127,7 +127,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
         <button type="button" data-mode="file">Upload PDF / image</button>
       </div>
       <div id="paneText">
-        <textarea id="text" placeholder="Paste your notes, a textbook paragraph, lecture summary…"></textarea>
+        <textarea id="text" placeholder="Paste your notes, a textbook paragraph, or a ChatGPT / Claude conversation…"></textarea>
       </div>
       <div id="paneFile" style="display:none">
         <label class="drop" id="drop" for="file"><b>Choose a PDF or image</b><br><span id="dropName">or tap to browse — up to ~8&nbsp;MB</span></label>
@@ -208,6 +208,20 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     });
     $('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
+
+  // Google Ads tag (KRA-107): /try is a primary ad-landing page, so load the
+  // AW-… tag here too — otherwise an ad click's gclid isn't captured and the
+  // later signup conversion can't be attributed. Config-gated: no id → skip.
+  try { fetch('/api/config', { cache:'no-store' }).then(function(r){ return r.json(); }).then(function(cfg){
+    var id = cfg && cfg.googleAdsId; if (!id || window.gtag) return;
+    var sc = document.createElement('script'); sc.async = true;
+    sc.src = 'https://www.googletagmanager.com/gtag/js?id=' + encodeURIComponent(id);
+    document.head.appendChild(sc);
+    window.dataLayer = window.dataLayer || [];
+    window.gtag = function(){ window.dataLayer.push(arguments); };
+    window.gtag('js', new Date());
+    window.gtag('config', id);
+  }).catch(function(){}); } catch(e){}
 
   $('go').addEventListener('click', async function(){
     var body = {};

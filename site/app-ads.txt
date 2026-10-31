@@ -1,0 +1,5 @@
+# app-ads.txt for krakenote.com
+#
+# Google Ad Manager / AdSense
+#
+google.com, pub-3755071931273121, DIRECT, f08c47fec0942fa0

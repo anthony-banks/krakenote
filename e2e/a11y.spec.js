@@ -7,6 +7,10 @@ import { AxeBuilder } from '@axe-core/playwright';
 const PAGES = [
   { name: 'landing', url: '/' },
   { name: 'try', url: '/try' },
+  { name: 'chatgpt-to-flashcards', url: '/chatgpt-to-flashcards' },
+  { name: 'alternatives', url: '/alternatives' },
+  { name: 'vs-quizlet', url: '/vs-quizlet' },
+  { name: 'vs-anki', url: '/vs-anki' },
   { name: 'support', url: '/support.html' },
   { name: 'privacy', url: '/privacy.html' },
   { name: 'terms', url: '/terms.html' },

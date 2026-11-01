@@ -413,6 +413,13 @@ app.get('/api/decks', requireUser, async (req, res) => {
     console.error('[decks] list failed:', error.message);
     return res.status(500).json({ ok: false, error: 'Could not load your decks.', detail: error.message });
   }
+  // Due-now count per deck (same rule as /api/review/due). Best-effort: if it
+  // fails, decks still load and dueCount is null.
+  const dueByDeck = new Map();
+  const { data: dueRows, error: dueErr } = await req.db
+    .from('cards').select('deck_id').lte('due_at', new Date().toISOString()).limit(50000);
+  if (dueErr) console.error('[decks] due count failed:', dueErr.message);
+  else for (const r of dueRows || []) dueByDeck.set(r.deck_id, (dueByDeck.get(r.deck_id) || 0) + 1);
   const decks = (data || []).map((d) => ({
     id: d.id,
     title: d.title,
@@ -420,6 +427,7 @@ app.get('/api/decks', requireUser, async (req, res) => {
     created_at: d.created_at,
     pinned: !!d.pinned,
     cardCount: Array.isArray(d.cards) && d.cards[0] ? d.cards[0].count : 0,
+    dueCount: dueErr ? null : (dueByDeck.get(d.id) || 0),
   }));
   return res.json({ ok: true, decks });
 });

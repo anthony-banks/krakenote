@@ -775,6 +775,11 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
         <h3 class="acct-h">Need a hand?</h3>
         <p class="fb-lead" style="margin-bottom:0">Email <a href="mailto:support@krakenote.com?subject=Krakenote%20support">support@krakenote.com</a> and a human will get back to you.</p>
         <div class="acct-sep"></div>
+        <h3 class="acct-h">Delete account</h3>
+        <p class="fb-lead">Permanently deletes your account and all your notes, decks, and cards. This can’t be undone. An App Store subscription must be cancelled in your Apple ID settings.</p>
+        <div class="msg" id="acctDelMsg"></div>
+        <button class="btn signout-side" id="acctDelBtn" type="button">Delete my account</button>
+        <div class="acct-sep"></div>
         <div class="ios-soon">
           <span class="emoji">📱</span>
           <span class="txt"><b>iOS app coming soon</b><small>Study on the go — capture, review, and sync with everything here.</small></span>
@@ -3073,6 +3078,19 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
     } catch (ex){ btn.disabled = false; msgOn('acctMsg', 'err', 'Could not update password.'); }
   }
 
+  // Account deletion (App Store 5.1.1(v) parity with iOS): type DELETE to confirm.
+  function deleteAccount(){
+    showPrompt('Type DELETE to permanently delete your account', { placeholder: 'DELETE', okLabel: 'Delete account' }, async function(v){
+      if (v !== 'DELETE'){ msgOn('acctDelMsg', 'err', 'Account not deleted — you must type DELETE.'); return; }
+      var btn = $('acctDelBtn'); btn.disabled = true;
+      var out = await api('/api/account', { method:'DELETE', body: JSON.stringify({ confirm: 'DELETE' }) });
+      btn.disabled = false;
+      if (!out.res.ok || !out.data.ok){ msgOn('acctDelMsg', 'err', escapeHtml(out.data.error || 'Could not delete your account.')); return; }
+      await signOut();
+      setMsg('ok', 'Your account has been deleted.');
+    });
+  }
+
   async function signOut(){
     try { if (sb) await sb.auth.signOut(); } catch(e){}
     setMode('signin');
@@ -3189,6 +3207,7 @@ r.setAttribute('data-theme',s||sys);}catch(e){}})();</script>
   $('csvFile').addEventListener('change', function(){ var f = $('csvFile').files && $('csvFile').files[0]; if (f) importCsv(f); $('csvFile').value = ''; });
   $('acctNameBtn').addEventListener('click', saveName);
   $('fbSendBtn').addEventListener('click', sendFeedback);
+  $('acctDelBtn').addEventListener('click', deleteAccount);
   Array.prototype.forEach.call(document.querySelectorAll('.fb-seg-btn'), function(b){
     b.addEventListener('click', function(){
       fbKind = b.getAttribute('data-kind');

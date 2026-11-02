@@ -42,7 +42,7 @@ already in the `waitlist` table. `403 { error: "not_on_waitlist" }` otherwise.
 ### Decks
 | Method | Path | Body | Returns |
 |---|---|---|---|
-| GET | `/api/decks` | — | `{ decks: [{ id, title, subject, created_at, cardCount }] }` |
+| GET | `/api/decks` | — | `{ decks: [{ id, title, subject, created_at, pinned, cardCount, dueCount }] }` — `dueCount` is cards due now (null if it couldn't be computed) |
 | POST | `/api/decks` | `{ title, subject? }` | `{ deck: { id, title, subject, created_at, cardCount } }` |
 | DELETE | `/api/decks/:id` | — | `{ ok }` (cards cascade) |
 | GET | `/api/decks/:id/sources` | — | `{ sources: [{ id, kind, filename, summary, created_at }] }` |
@@ -90,6 +90,7 @@ FSRS state lives on the card (`stability`, `difficulty`, `fsrs_state`, `lapses`,
 | GET | `/api/stats` | — | `{ decks, cards, due, streak, reviewedToday, reviewed7d, totalReviews, retentionPct }` |
 | GET | `/api/profile` | — | `{ email, firstName, lastName }` |
 | PATCH | `/api/profile` | `{ firstName, lastName }` | `{ ok }` |
+| DELETE | `/api/account` | `{ confirm: 'DELETE' }` | `{ ok }` — permanently deletes the caller's auth user; all owned rows cascade |
 
 ---
 

@@ -13,6 +13,7 @@ import { applyRcEvent } from './lib/rc-webhook.js';
 import { ipIsPrivate } from './lib/net-guard.js';
 import { normalizeFeedback, buildLinearIssue } from './lib/feedback.js';
 import { csvCell, stripHtml, capText } from './lib/text.js';
+import { revokeAppleAuthorization, normalizePrivateKey } from './lib/apple-revoke.js';
 import net from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -1175,6 +1176,15 @@ app.patch('/api/profile', requireUser, async (req, res) => {
 // user_id set null, so we strip the feedback email first. The body must echo
 // { confirm: 'DELETE' } so a stray request can't wipe an account. An App Store
 // subscription is billed by Apple and has to be cancelled there separately.
+// Apple-linked accounts: the iOS app sends a fresh `appleAuthorizationCode`, and
+// we revoke the Sign in with Apple token before deleting. Revocation is
+// best-effort: a failure is logged but never blocks the deletion itself.
+const APPLE_SIGNIN = {
+  teamId: process.env.APPLE_TEAM_ID || '',
+  keyId: process.env.APPLE_KEY_ID || '',
+  clientId: process.env.APPLE_CLIENT_ID || 'com.krakenote.mobile',
+  privateKey: normalizePrivateKey(process.env.APPLE_PRIVATE_KEY),
+};
 app.delete('/api/account', requireUser, async (req, res) => {
   if (req.body?.confirm !== 'DELETE') {
     return res.status(400).json({ ok: false, error: 'Confirmation required.' });
@@ -1183,6 +1193,15 @@ app.delete('/api/account', requireUser, async (req, res) => {
     return res.status(429).json({ ok: false, error: 'Too many attempts — try again in a minute.' });
   }
   const uid = req.user.id;
+  const appleCode = typeof req.body?.appleAuthorizationCode === 'string' ? req.body.appleAuthorizationCode : '';
+  if (appleCode) {
+    if (!APPLE_SIGNIN.teamId || !APPLE_SIGNIN.keyId || !APPLE_SIGNIN.privateKey) {
+      console.error('[account] apple revoke skipped: APPLE_TEAM_ID / APPLE_KEY_ID / APPLE_PRIVATE_KEY not set');
+    } else {
+      const r = await revokeAppleAuthorization(appleCode, APPLE_SIGNIN);
+      if (!r.ok) console.error('[account] apple revoke failed:', r.error);
+    }
+  }
   const { error: fbErr } = await supabase.from('feedback').update({ email: null }).eq('user_id', uid);
   if (fbErr) console.error('[account] feedback scrub failed:', fbErr.message); // non-fatal
   const { error } = await supabase.auth.admin.deleteUser(uid);

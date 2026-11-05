@@ -1788,6 +1788,10 @@ app.get('/try', (_req, res) => res.sendFile(join(SITE_DIR, 'try.html')));
 app.get('/midnight-vault', (_req, res) => res.sendFile(join(SITE_DIR, 'midnight-vault', 'index.html')));
 app.get('/midnight-vault/privacy', (_req, res) => res.sendFile(join(SITE_DIR, 'midnight-vault', 'privacy.html')));
 app.get('/midnight-vault/support', (_req, res) => res.sendFile(join(SITE_DIR, 'midnight-vault', 'support.html')));
+// Christmas TV (Apple TV app; same pattern as Midnight Vault above).
+app.get('/christmas-tv', (_req, res) => res.sendFile(join(SITE_DIR, 'christmas-tv', 'index.html')));
+app.get('/christmas-tv/privacy', (_req, res) => res.sendFile(join(SITE_DIR, 'christmas-tv', 'privacy.html')));
+app.get('/christmas-tv/support', (_req, res) => res.sendFile(join(SITE_DIR, 'christmas-tv', 'support.html')));
 
 // app-ads.txt for the ad networks' crawlers: must be plain text, never the HTML
 // catch-all. Edit site/app-ads.txt to add publisher lines.

@@ -1,0 +1,24 @@
+/* Christmas TV — layered on /legal.css (same layout + type scale), re-toned
+   deep green, cranberry and gold so the section reads as its own brand, not Krakenote. */
+:root{
+  --abyss:#0c1410; --deep:#13201a; --teal:#d9a85a; --slate:#a7b0a6;
+  --parchment:#f4ead5;
+}
+body{background:radial-gradient(ellipse at top,#1b2c22 0%,var(--abyss) 60%) fixed;background-color:var(--abyss)}
+p,ul{color:#d6d0c2}
+nav{background:rgba(12,20,16,.8);border-bottom-color:rgba(217,168,90,.15)}
+.navlinks a{color:#d6d0c2}
+.brand .ct-mark{width:30px;height:30px}
+.card{border-color:rgba(217,168,90,.2)}
+footer{background:#08100c;border-top-color:rgba(217,168,90,.12)}
+.foot-links,.foot-links a{color:var(--slate)}
+.copy{color:#8d978c}
+
+/* Landing */
+.ct-hero{padding:24px 0 8px}
+.ct-hero h1{font-size:clamp(36px,6vw,56px);letter-spacing:-1px}
+.ct-hero .lede{font-size:18px;max-width:640px}
+.ct-features{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px;margin:32px 0}
+.ct-features .card{margin:0}
+.ct-features h2{margin-top:0}
+.ct-features .tag{font-family:var(--head);font-weight:600;font-size:12px;letter-spacing:1px;text-transform:uppercase;color:var(--teal);margin-bottom:6px}
